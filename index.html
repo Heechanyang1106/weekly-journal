@@ -216,6 +216,19 @@
   </div>
 </dialog>
 
+<!-- 링크로 받은 일정 -->
+<dialog id="linkDialog" class="dlg" aria-labelledby="linkHeading">
+  <div class="dlg-head"><h2 id="linkHeading">링크로 받은 일정</h2></div>
+  <div class="dlg-body">
+    <p id="linkIntro" class="muted small">아래 내용을 추가할까요? 날짜와 시간이 맞는지 확인해 주세요.</p>
+    <ul id="linkList" class="link-list"></ul>
+  </div>
+  <div class="dlg-foot">
+    <button type="button" class="btn btn-ghost" data-close>취소</button>
+    <button type="button" id="linkAdd" class="btn btn-primary">추가</button>
+  </div>
+</dialog>
+
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>

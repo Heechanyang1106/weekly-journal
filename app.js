@@ -67,8 +67,10 @@
     mode: 'local',
     user: null,
     ready: false,
+    loaded: false, // 저장된 일정을 한 번이라도 다 받아왔는지
     editingTask: null
   };
+  var pendingLink = null; // 링크(#add=...)로 받은 추가할 항목들
   var store = null;
 
   function cats() { return (S.settings.cats && S.settings.cats.length) ? S.settings.cats : DEFAULT_CATS; }
@@ -101,6 +103,7 @@
         S.tasks = new Map(raw.tasks.map(function (t) { return [t.id, t]; }));
         S.settings = Object.assign(defaultSettings(), raw.settings || {});
         S.ready = true;
+        S.loaded = true;
         render();
       },
       putEvent: function (e) { S.events.set(e.id, e); save(); render(); },
@@ -157,14 +160,18 @@
         uid = user.uid;
         S.events = new Map(); S.tasks = new Map(); S.settings = defaultSettings();
         S.ready = true;
+        S.loaded = false;
+        var gotEvents = false, gotTasks = false;
         showScreen('app');
         render();
         unsubs.push(fs.onSnapshot(col('events'), function (snap) {
           S.events = new Map(snap.docs.map(function (d) { return [d.id, d.data()]; }));
+          gotEvents = true; S.loaded = gotEvents && gotTasks;
           render();
         }, fail));
         unsubs.push(fs.onSnapshot(col('tasks'), function (snap) {
           S.tasks = new Map(snap.docs.map(function (d) { return [d.id, d.data()]; }));
+          gotTasks = true; S.loaded = gotEvents && gotTasks;
           render();
         }, fail));
         unsubs.push(fs.onSnapshot(settingsRef(), function (d) {
@@ -227,6 +234,7 @@
     renderHeader();
     renderGrid();
     renderSide();
+    if (pendingLink && S.loaded) showLinkDialog();
   }
 
   function renderHeader() {
@@ -618,6 +626,140 @@
     r.readAsText(file);
   }
 
+  /* ---------------- 링크로 일정 추가 (#add=...) ----------------
+   * 주소 뒤에 #add=<JSON> 을 붙이면 확인 후 일정/할 일을 추가해요.
+   * JSON은 항목 하나 {…} 또는 여러 개 […]. 짧은 키:
+   *   t 제목, d 날짜(YYYY-MM-DD), s 시작(HH:MM), e 끝(HH:MM), p 장소, m 메모,
+   *   c 카테고리(이름 일부나 id), u 시간 미정(true), o 끝 미정(true),
+   *   w 매주 반복 요일 [0=일 … 6=토], f 반복 시작일, l 반복 종료일
+   *   할 일: {"todo":"내용"} (+ d 그 주 목록, month:true 그 달 목록)
+   */
+  function readLinkPayload() {
+    var m = (location.hash || '').match(/^#add=([\s\S]+)$/);
+    if (!m) return null;
+    var raw = m[1], data = null;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    try { data = JSON.parse(decodeURIComponent(raw)); }
+    catch (e) {
+      try { data = JSON.parse(raw); }
+      catch (e2) {
+        try { data = JSON.parse(decodeURIComponent(escape(atob(raw.replace(/-/g, '+').replace(/_/g, '/'))))); }
+        catch (e3) { return { bad: true }; }
+      }
+    }
+    if (data && !Array.isArray(data) && Array.isArray(data.items)) data = data.items;
+    if (!Array.isArray(data)) data = [data];
+    return { items: data };
+  }
+  function hashStr(s) {
+    var h = 5381;
+    for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36);
+  }
+  function normTime(t) {
+    if (t == null || t === '') return null;
+    var mm = String(t).trim().match(/^(\d{1,2}):?(\d{2})$/);
+    if (!mm) return undefined;
+    var h = Number(mm[1]), mi = Number(mm[2]);
+    if (h > 24 || mi > 59 || (h === 24 && mi > 0)) return undefined;
+    return h === 24 ? '00:00' : pad(h) + ':' + pad(mi);
+  }
+  function isDateKey(d) { return typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && !isNaN(parseKey(d)); }
+  function findCat(c) {
+    if (!c) return cats()[0];
+    var s = String(c).trim();
+    var list = cats();
+    for (var i = 0; i < list.length; i++) if (list[i].id === s || list[i].name === s) return list[i];
+    for (var j = 0; j < list.length; j++) if (list[j].name.indexOf(s) >= 0 || s.indexOf(list[j].name.split('·')[0]) >= 0) return list[j];
+    return list[0];
+  }
+  function normalizeLinkItem(x) {
+    if (!x || typeof x !== 'object') return { bad: '읽을 수 없는 항목' };
+    var id = 'lnk-' + hashStr(JSON.stringify(x));
+    if (x.todo) {
+      var month = !!x.month;
+      var base = isDateKey(x.d) ? parseKey(x.d) : new Date();
+      var period = month ? monthKeyOf(addDays(startOfWeek(base), 4)) : keyOf(startOfWeek(base));
+      var task = { id: id, text: String(x.todo).slice(0, 200), state: 'todo', scope: month ? 'month' : 'week', period: period, created: Date.now() };
+      return {
+        kind: 'task', obj: task, exists: S.tasks.has(id),
+        title: '할 일 · ' + task.text,
+        meta: month ? (Number(period.slice(5)) + '월 할 일 목록') : (mdDow(period) + ' 주의 할 일 목록')
+      };
+    }
+    var title = String(x.t || x.title || '').trim().slice(0, 100);
+    if (!title) return { bad: '제목이 없는 항목' };
+    var days = Array.isArray(x.w) ? x.w : (Array.isArray(x.days) ? x.days : null);
+    var weekly = !!(days && days.length);
+    var s = normTime(x.s), e = normTime(x.e);
+    if (s === undefined || e === undefined) return { bad: title + ': 시간을 읽을 수 없어요' };
+    var untimed = !!x.u || !s;
+    var openEnd = !untimed && !!x.o;
+    if (!untimed && !openEnd && !e) e = fromMin(Math.min(toMin(s) + 60, 1440)).replace('24:00', '00:00');
+    if (!untimed && !openEnd && endMin(e) <= toMin(s)) return { bad: title + ': 끝 시간이 시작보다 빨라요' };
+    var c = findCat(x.c);
+    var ev = {
+      id: id, title: title, place: String(x.p || x.place || '').slice(0, 100), memo: String(x.m || x.memo || '').slice(0, 1000),
+      cat: c.id, repeat: weekly ? 'weekly' : 'once', untimed: untimed, openEnd: openEnd,
+      start: untimed ? null : s, end: untimed || openEnd ? null : e,
+      done: {}, skip: {}, created: Date.now(), updated: Date.now(), via: 'link'
+    };
+    var when;
+    if (weekly) {
+      ev.days = days.map(Number).filter(function (n) { return n >= 0 && n <= 6; }).sort();
+      if (!ev.days.length) return { bad: title + ': 반복 요일을 읽을 수 없어요' };
+      ev.from = isDateKey(x.f) ? x.f : (isDateKey(x.d) ? x.d : keyOf(new Date()));
+      ev.until = isDateKey(x.l) ? x.l : null;
+      when = '매주 ' + ev.days.map(function (i) { return DOW[i]; }).join('·') + ' · ' + mdDow(ev.from) + '부터' + (ev.until ? ' ' + mdDow(ev.until) + '까지' : '');
+    } else {
+      if (!isDateKey(x.d)) return { bad: title + ': 날짜가 없어요' };
+      ev.date = x.d;
+      when = mdDow(x.d);
+    }
+    var time = untimed ? '시간 미정' : s + (openEnd ? '~' : '–' + fromMin(endMin(e)));
+    return {
+      kind: 'event', obj: ev, exists: S.events.has(id), cat: c,
+      title: title, meta: when + ' · ' + time + (ev.place ? ' · ' + ev.place : '') + ' · ' + c.name
+    };
+  }
+  var linkItems = [];
+  function showLinkDialog() {
+    var p = pendingLink; pendingLink = null;
+    if (p.bad) { toast('링크 내용을 읽지 못했어요. 링크가 잘렸는지 확인해 주세요.'); return; }
+    linkItems = p.items.map(normalizeLinkItem);
+    var addable = linkItems.filter(function (it) { return !it.bad && !it.exists; }).length;
+    $('#linkList').innerHTML = linkItems.map(function (it) {
+      if (it.bad) return '<li class="link-item is-skip is-bad"><span class="li-flag">추가할 수 없어요</span><span class="li-meta">' + esc(it.bad) + '</span></li>';
+      var style = it.cat ? ' style="--bar:' + esc(it.cat.color) + ';--bg-c:' + tint(it.cat.color, 0.86) + '"' : '';
+      return '<li class="link-item' + (it.exists ? ' is-skip' : '') + '"' + style + '>' +
+        (it.exists ? '<span class="li-flag">이미 추가됨</span>' : '') +
+        '<span class="li-title">' + esc(it.title) + '</span><span class="li-meta">' + esc(it.meta) + '</span></li>';
+    }).join('');
+    $('#linkIntro').textContent = addable
+      ? '아래 ' + addable + '개를 추가할까요? 날짜와 시간이 맞는지 확인해 주세요.'
+      : '새로 추가할 항목이 없어요.';
+    $('#linkAdd').hidden = !addable;
+    $('#linkAdd').textContent = addable + '개 추가';
+    var d = $('#linkDialog');
+    if (!d.open) d.showModal();
+  }
+  function addLinkItems() {
+    var n = 0, firstDate = null;
+    linkItems.forEach(function (it) {
+      if (it.bad || it.exists) return;
+      if (it.kind === 'task') store.putTask(it.obj);
+      else {
+        store.putEvent(it.obj);
+        var d = it.obj.date || it.obj.from;
+        if (!firstDate || d < firstDate) firstDate = d;
+      }
+      n++;
+    });
+    $('#linkDialog').close();
+    if (firstDate) { S.week = startOfWeek(parseKey(firstDate)); render(); }
+    toast(n + '개 추가했어요');
+  }
+
   /* ---------------- 안내 메시지 ---------------- */
   var toastTimer;
   function toast(msg) {
@@ -827,6 +969,13 @@
       d.addEventListener('click', function (e) { if (e.target === d) d.close(); });
     });
 
+    // 링크로 받은 일정
+    $('#linkAdd').onclick = addLinkItems;
+    window.addEventListener('hashchange', function () {
+      var p = readLinkPayload();
+      if (p) { pendingLink = p; render(); }
+    });
+
     // 현재 시각 선 갱신
     setInterval(function () { if (S.ready && !document.hidden) renderGrid(); }, 60000);
   }
@@ -879,6 +1028,7 @@
 
   /* ---------------- 시작 ---------------- */
   function boot() {
+    pendingLink = readLinkPayload();
     bind();
     var cfg = window.FIREBASE_CONFIG;
     if (cfg && cfg.apiKey) {

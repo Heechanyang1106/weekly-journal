@@ -289,6 +289,17 @@ button { cursor: pointer; }
 .file-btn { position: relative; overflow: hidden; }
 .file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 
+.link-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.link-item {
+  background: var(--bg-c, #eef2f7); border-left: 3px solid var(--bar, #7a8191); border-radius: 6px;
+  padding: 10px 12px; display: flex; flex-direction: column; gap: 2px;
+}
+.link-item .li-title { font-size: 15px; font-weight: 600; }
+.link-item .li-meta { font-size: 13px; color: var(--ink-2); }
+.link-item.is-skip { opacity: .6; }
+.link-item .li-flag { font-size: 12px; font-weight: 600; color: var(--muted); }
+.link-item.is-bad .li-flag { color: var(--danger); }
+
 .toast {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--primary); color: #fff;
   padding: 10px 16px; border-radius: 8px; font-size: 14px; z-index: 100; box-shadow: 0 8px 24px rgba(20,32,52,.25);
