@@ -1,0 +1,167 @@
+# 한 주 저널 — 설치·설정 안내
+
+한 주 일정을 시간표로 짜고, 날짜를 못 정한 일은 옆에 모아두는 불렛저널 사이트예요.
+Google로 로그인하면 폰과 컴퓨터에서 같은 일정이 보여요.
+
+- **사이트 주소(호스팅)**: GitHub Pages — 무료
+- **로그인 + 데이터 저장**: Firebase — 무료 요금제(Spark)로 충분해요
+
+전체 순서는 아래와 같아요. 처음 한 번만 하면 되고, 30분 정도 걸려요.
+
+1. Firebase 프로젝트 만들기 (로그인·저장 공간)
+2. `firebase-config.js`에 내 설정 붙여넣기
+3. GitHub에 파일 올리고 사이트 주소 만들기
+4. Firebase에 내 사이트 주소 등록하기
+5. 폰 홈 화면에 추가하기
+
+> 💡 1~2단계를 건너뛰고 3단계만 해도 사이트는 열려요. 이때는 "로컬 모드"로, 그 기기에만 저장되고 동기화는 안 돼요.
+
+---
+
+## 들어 있는 파일
+
+| 파일 | 하는 일 |
+|---|---|
+| `index.html` | 화면 구조 |
+| `style.css` | 색·글꼴·배치 |
+| `app.js` | 모든 기능 (일정, 반복, 체크, 할 일, 동기화) |
+| `firebase-config.js` | **내 Firebase 설정을 붙여넣는 곳** |
+| `firestore.rules` | 데이터 보안 규칙 (Firebase에 붙여넣기용) |
+| `README.md` | 이 안내서 |
+
+---
+
+## 1단계. Firebase 프로젝트 만들기
+
+### 1-1. 프로젝트 만들기
+1. https://console.firebase.google.com 에 Google 계정으로 들어가요.
+2. **프로젝트 만들기(프로젝트 추가)** → 이름을 정해요. 예: `weekly-journal`
+3. Google 애널리틱스는 **사용 안 함**으로 꺼도 돼요 → **프로젝트 만들기**
+
+### 1-2. Google 로그인 켜기
+1. 왼쪽 메뉴 **빌드 → Authentication** → **시작하기**
+2. **로그인 방법(Sign-in method)** 탭 → **Google** 선택
+3. **사용 설정** 스위치를 켜고, 프로젝트 지원 이메일에 내 이메일 선택 → **저장**
+
+### 1-3. 데이터베이스(Firestore) 만들기
+1. 왼쪽 메뉴 **빌드 → Firestore Database** → **데이터베이스 만들기**
+2. 위치: **asia-northeast3 (Seoul)** 추천 (나중에 못 바꿔요)
+3. **프로덕션 모드**로 시작 → 만들기
+4. 만들어지면 위쪽 **규칙(Rules)** 탭을 눌러요.
+5. 안에 있는 내용을 **모두 지우고**, `firestore.rules` 파일 내용을 그대로 붙여넣은 뒤 **게시**를 눌러요.
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
+```
+
+이 규칙 덕분에 **로그인한 본인만** 자기 일정을 볼 수 있어요.
+
+---
+
+## 2단계. `firebase-config.js`에 설정 붙여넣기
+
+1. Firebase 콘솔 왼쪽 위 **⚙️(톱니바퀴) → 프로젝트 설정**
+2. 아래쪽 **내 앱** 칸에서 **웹 아이콘 `</>`** 클릭
+3. 앱 닉네임 입력 (예: `web`) → Firebase 호스팅은 체크하지 않음 → **앱 등록**
+4. 화면에 나온 코드 중 `const firebaseConfig = { ... };` 부분의 **중괄호 안 내용**을 복사해요.
+5. `firebase-config.js` 파일을 메모장(맥은 텍스트 편집기)으로 열어서
+   `window.FIREBASE_CONFIG = null;` 줄을 아래처럼 바꿔요.
+
+```js
+window.FIREBASE_CONFIG = {
+  apiKey: "AIza...",
+  authDomain: "weekly-journal-xxxx.firebaseapp.com",
+  projectId: "weekly-journal-xxxx",
+  storageBucket: "weekly-journal-xxxx.appspot.com",
+  messagingSenderId: "1234567890",
+  appId: "1:1234567890:web:abcdef"
+};
+```
+
+> 이 값들은 다른 사람에게 보여도 괜찮은 값이에요(비밀번호가 아니에요). 데이터는 1-3단계의 규칙으로 보호돼요.
+
+---
+
+## 3단계. GitHub에 올려서 사이트 만들기
+
+### 3-1. 저장소(repository) 만들기
+1. https://github.com 가입 후 로그인
+2. 오른쪽 위 **＋ → New repository**
+3. Repository name: `weekly-journal` (원하는 이름)
+4. **Public** 선택 (무료 계정에서 GitHub Pages를 쓰려면 Public이어야 해요. 코드만 공개되고, 일정 데이터는 Firebase에 있어서 공개되지 않아요.)
+5. **Create repository**
+
+### 3-2. 파일 올리기
+1. 만든 저장소 화면에서 **uploading an existing file** 링크(또는 **Add file → Upload files**) 클릭
+2. `index.html`, `style.css`, `app.js`, `firebase-config.js`, `firestore.rules`, `README.md`를 끌어다 놓기
+3. 아래 **Commit changes** 클릭
+
+### 3-3. 사이트 켜기 (GitHub Pages)
+1. 저장소 위쪽 **Settings** → 왼쪽 **Pages**
+2. **Source: Deploy from a branch**
+3. **Branch: `main`**, 폴더 **`/ (root)`** → **Save**
+4. 1~3분 뒤 같은 화면 위쪽에 사이트 주소가 나와요:
+   `https://내아이디.github.io/weekly-journal/`
+
+---
+
+## 4단계. Firebase에 내 사이트 주소 등록하기
+
+이걸 안 하면 로그인할 때 "이 주소가 Firebase에 등록되지 않았어요"라고 나와요.
+
+1. Firebase 콘솔 → **Authentication → 설정(Settings)** 탭 → **승인된 도메인(Authorized domains)**
+2. **도메인 추가** → `내아이디.github.io` 입력 (뒤에 `/weekly-journal` 은 붙이지 않아요) → 추가
+
+이제 사이트에 들어가서 **Google로 로그인**을 누르면 끝이에요! 🎉
+
+---
+
+## 5단계. 폰 홈 화면에 앱처럼 추가하기
+
+- **아이폰(사파리)**: 사이트 열기 → 아래 공유 버튼 → **홈 화면에 추가**
+- **안드로이드(크롬)**: 사이트 열기 → 오른쪽 위 ⋮ → **홈 화면에 추가**
+
+같은 Google 계정으로 로그인하면 컴퓨터에서 적은 일정이 폰에도 바로 보여요.
+
+---
+
+## 사용법 요약
+
+| 하고 싶은 것 | 방법 |
+|---|---|
+| 일정 추가 | 시간표 빈 칸 누르기 (그 시간으로 자동 입력) 또는 **일정 추가** 버튼 |
+| 시간 미정 일정 | 시간표 맨 위 **미정** 줄을 누르거나, 창에서 "시간 미정" 체크 |
+| 반복 일정 | 창의 **매주 반복** → 요일(여러 개 가능) → 반복 시작일/종료일 |
+| 완료 체크 | 일정 오른쪽 위 동그라미 누르기 (반복 일정은 그 날짜만 체크돼요) |
+| 일정 수정·삭제 | 일정 블록 누르기. 반복 일정은 "하루만 삭제 / 전체 삭제" 선택 |
+| 할 일 적기 | 오른쪽 **할 일 모음**에 적고 Enter (이번 주 / 이번 달 탭) |
+| 할 일 → 일정 | 컴퓨터: 시간표로 끌어다 놓기 · 폰: 📅 버튼 |
+| 할 일 상태 | 앞의 기호 누르기: • 할 일 ↔ × 완료 / → 버튼: 다음 주(달)로 미루기 |
+| 이번 주 목표·메모 | 제목 아래 목표 칸, 오른쪽 아래 메모 칸 (주마다 따로 저장) |
+| 색·카테고리 | **카테고리·색 편집** 또는 ⚙️ 설정 |
+| 시간표 범위 | ⚙️ 설정 → 시간표 범위 (기본 08:00–24:00) |
+| 백업 | ⚙️ 설정 → 백업 파일 내보내기 / 불러오기 |
+
+---
+
+## 나중에 고치고 싶을 때
+
+1. 고친 파일(예: `app.js`)을 받는다.
+2. GitHub 저장소 → **Add file → Upload files** → 같은 이름의 파일을 끌어다 놓기 → **Commit changes**
+3. 1~3분 뒤 사이트에 반영돼요. (안 바뀌어 보이면 새로고침, 폰은 앱을 껐다 켜기)
+
+일정 데이터는 Firebase에 따로 저장돼 있어서, 파일을 바꿔도 일정은 그대로 남아요.
+
+## 문제가 생기면
+
+- **로그인 버튼을 눌러도 안 돼요** → 4단계(승인된 도메인)를 확인하세요.
+- **"저장 중 문제가 생겼어요: permission-denied"** → 1-3단계의 규칙을 게시했는지 확인하세요.
+- **화면 위에 "로컬 모드"라고 보여요** → `firebase-config.js`가 아직 `null`이에요. 2단계를 확인하세요.
+- **로컬 모드에서 쓰던 일정을 옮기고 싶어요** → 로컬 모드에서 ⚙️ → 백업 내보내기 → 로그인 후 ⚙️ → 백업 불러오기

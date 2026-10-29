@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f5f7fb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="한 주 저널">
+<title>한 주 저널</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f3350'/%3E%3Crect x='7' y='8' width='18' height='4' rx='1' fill='%23dde7f6'/%3E%3Crect x='7' y='14' width='11' height='4' rx='1' fill='%23dcefe6'/%3E%3Crect x='7' y='20' width='14' height='4' rx='1' fill='%23fdf0d8'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<script src="firebase-config.js"></script>
+<script src="app.js" defer></script>
+</head>
+<body>
+
+<div id="loading" class="screen-center">
+  <p class="muted">불러오는 중…</p>
+</div>
+
+<div id="login" class="screen-center" hidden>
+  <div class="login-card">
+    <p class="eyebrow">WEEKLY PLAN</p>
+    <h1>한 주 저널</h1>
+    <p class="muted">한 주 일정을 시간표로 짜고, 날짜를 못 정한 일은 옆에 모아두는 불렛저널이에요. 로그인하면 폰과 컴퓨터에서 같은 일정이 보여요.</p>
+    <button id="loginBtn" class="btn btn-primary btn-lg" type="button">
+      <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
+      Google로 로그인
+    </button>
+    <p id="loginError" class="error" role="alert" hidden></p>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header class="top">
+    <div class="top-left">
+      <p class="eyebrow">WEEKLY PLAN</p>
+      <div class="title-row">
+        <h1>시간으로 보는 이번 주</h1>
+        <span id="rangeLabel" class="range"></span>
+      </div>
+      <div class="goal-row">
+        <label for="goalInput" class="pill">이번 주 목표</label>
+        <input id="goalInput" class="goal-input" type="text" placeholder="이번 주 목표를 적어보세요" autocomplete="off">
+      </div>
+    </div>
+    <div class="top-right">
+      <div class="seg" role="group" aria-label="주 이동">
+        <button id="prevWeek" class="icon-btn" type="button" aria-label="지난 주"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg></button>
+        <button id="thisWeek" class="seg-mid" type="button">이번 주</button>
+        <button id="nextWeek" class="icon-btn" type="button" aria-label="다음 주"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button>
+      </div>
+      <button id="addEventBtn" class="btn btn-primary" type="button"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 1v12M1 7h12"/></svg>일정 추가</button>
+      <button id="settingsBtn" class="icon-btn icon-btn-box" type="button" aria-label="설정"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+    </div>
+  </header>
+
+  <div class="legend-row">
+    <div id="legend" class="legend"></div>
+    <button id="editCatsLink" class="link-btn" type="button">카테고리·색 편집</button>
+    <span class="legend-note"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 8a6 6 0 0 1 10.5-4M14 8a6 6 0 0 1-10.5 4"/><path d="M12.5 1v3h-3M3.5 15v-3h3"/></svg>반복 일정</span>
+    <span id="modeBadge" class="mode-badge" hidden>로컬 모드</span>
+    <span id="progress" class="progress"></span>
+  </div>
+
+  <div class="layout">
+    <section class="board" aria-label="주간 시간표">
+      <div id="grid" class="tt"></div>
+      <p class="board-hint">빈 칸을 누르면 그 시간에 일정이 추가돼요. 오른쪽 할 일을 시간표로 끌어다 놓아도 돼요.</p>
+    </section>
+
+    <aside class="side" aria-label="할 일 모음">
+      <div class="side-head">
+        <h2>할 일 모음</h2>
+        <p class="muted small">날짜·시간을 아직 못 정한 일. 시간표로 끌어다 놓으면 일정이 돼요.</p>
+      </div>
+      <div class="tabs" role="tablist">
+        <button id="tabWeek" role="tab" type="button" class="tab">이번 주</button>
+        <button id="tabMonth" role="tab" type="button" class="tab"></button>
+      </div>
+      <ul id="taskList" class="task-list"></ul>
+      <form id="taskForm" class="task-form" autocomplete="off">
+        <label for="taskInput" class="sr-only">새 할 일</label>
+        <input id="taskInput" type="text" placeholder="할 일 적기…" maxlength="200">
+        <button type="submit" class="btn btn-soft">추가</button>
+      </form>
+      <div class="sig-legend">
+        <span><b>•</b> 할 일</span>
+        <span><b class="c-done">×</b> 완료</span>
+        <span><b class="c-moved">&gt;</b> 일정으로 옮김</span>
+        <span><b class="c-later">&lt;</b> 미룸</span>
+      </div>
+      <div class="memo-box">
+        <label for="memoInput" class="memo-label">이번 주 메모</label>
+        <textarea id="memoInput" rows="4" placeholder="이번 주에 기억할 것, 동선 메모 등"></textarea>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- 일정 추가/수정 -->
+<dialog id="evDialog" class="dlg" aria-labelledby="evHeading">
+  <form id="evForm" method="dialog" novalidate>
+    <div class="dlg-head">
+      <h2 id="evHeading">일정 추가</h2>
+      <button type="button" class="icon-btn" data-close aria-label="닫기"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"/></svg></button>
+    </div>
+    <div class="dlg-body">
+      <div class="field">
+        <label for="fTitle">일정</label>
+        <input id="fTitle" type="text" maxlength="100" placeholder="예: 드럼 레슨">
+      </div>
+
+      <div class="when">
+        <span class="field-label">언제</span>
+        <div class="seg-toggle" role="radiogroup" aria-label="반복 여부">
+          <button type="button" role="radio" id="modeOnce">한 번만</button>
+          <button type="button" role="radio" id="modeWeekly">매주 반복</button>
+        </div>
+        <div id="onceBox">
+          <label class="sub-field">날짜<input id="fDate" type="date"></label>
+        </div>
+        <div id="weeklyBox" hidden>
+          <span class="sub-label">요일 (여러 개 선택 가능)</span>
+          <div id="dayChips" class="day-chips"></div>
+        </div>
+        <div class="two">
+          <label class="sub-field">시작<input id="fStart" type="time" step="300"></label>
+          <label class="sub-field">끝<input id="fEnd" type="time" step="300"></label>
+        </div>
+        <div id="rangeBox" class="two" hidden>
+          <label class="sub-field">반복 시작일<input id="fFrom" type="date"></label>
+          <label class="sub-field">반복 종료일 (선택)<input id="fUntil" type="date"></label>
+        </div>
+        <div class="checks">
+          <label><input id="fUntimed" type="checkbox">시간 미정</label>
+          <label><input id="fOpenEnd" type="checkbox">끝나는 시간 미정</label>
+        </div>
+        <p id="evSummary" class="summary"></p>
+      </div>
+
+      <div class="field">
+        <label for="fPlace">장소</label>
+        <input id="fPlace" type="text" maxlength="100" placeholder="예: 당산 드럼 학원">
+      </div>
+
+      <div class="field">
+        <span class="field-label">카테고리 · 색</span>
+        <div id="catChips" class="cat-chips"></div>
+      </div>
+
+      <div class="field">
+        <label for="fMemo">메모</label>
+        <textarea id="fMemo" rows="2" maxlength="1000"></textarea>
+      </div>
+      <p id="evError" class="error" role="alert" hidden></p>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" id="evDelete" class="btn btn-danger-text">삭제</button>
+      <button type="button" class="btn btn-ghost" data-close>취소</button>
+      <button type="submit" class="btn btn-primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 삭제 확인 -->
+<dialog id="delDialog" class="dlg dlg-sm" aria-labelledby="delHeading">
+  <div class="dlg-head"><h2 id="delHeading">일정 삭제</h2></div>
+  <div class="dlg-body"><p id="delText" class="muted"></p></div>
+  <div class="dlg-foot dlg-foot-col">
+    <button type="button" id="delOne" class="btn btn-ghost">이 날만 삭제</button>
+    <button type="button" id="delAll" class="btn btn-danger">삭제</button>
+    <button type="button" class="btn btn-ghost" data-close>취소</button>
+  </div>
+</dialog>
+
+<!-- 설정 -->
+<dialog id="setDialog" class="dlg" aria-labelledby="setHeading">
+  <div class="dlg-head">
+    <h2 id="setHeading">설정</h2>
+    <button type="button" class="icon-btn" data-close aria-label="닫기"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"/></svg></button>
+  </div>
+  <div class="dlg-body">
+    <section class="set-sec">
+      <h3>카테고리 · 색</h3>
+      <div id="catRows" class="cat-rows"></div>
+      <button type="button" id="addCat" class="btn btn-soft btn-sm">+ 카테고리 추가</button>
+    </section>
+    <section class="set-sec">
+      <h3>시간표 범위</h3>
+      <div class="two">
+        <label class="sub-field">시작 시각<select id="hourStart"></select></label>
+        <label class="sub-field">끝 시각<select id="hourEnd"></select></label>
+      </div>
+    </section>
+    <section class="set-sec">
+      <h3>백업</h3>
+      <p class="muted small">모든 일정·할 일을 파일로 저장하거나, 저장한 파일을 다시 불러와요.</p>
+      <div class="row-gap">
+        <button type="button" id="exportBtn" class="btn btn-soft btn-sm">백업 파일 내보내기</button>
+        <label class="btn btn-soft btn-sm file-btn">백업 불러오기<input id="importInput" type="file" accept="application/json,.json"></label>
+      </div>
+    </section>
+    <section class="set-sec">
+      <h3>계정</h3>
+      <p id="accountText" class="muted small"></p>
+      <button type="button" id="logoutBtn" class="btn btn-ghost btn-sm" hidden>로그아웃</button>
+    </section>
+  </div>
+  <div class="dlg-foot">
+    <button type="button" class="btn btn-ghost" data-close>취소</button>
+    <button type="button" id="setSave" class="btn btn-primary">저장</button>
+  </div>
+</dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
