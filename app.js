@@ -33,7 +33,10 @@
   function keyOf(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
   function parseKey(k) { var p = k.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
   function addDays(d, n) { var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x; }
-  function startOfWeek(d) { return addDays(d, -d.getDay()); }
+  // 한 주는 월요일에 시작해서 일요일에 끝나요
+  function startOfWeek(d) { return addDays(d, -((d.getDay() + 6) % 7)); }
+  var WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]; // 월~일
+  function dayLabels(days) { return days.slice().sort(function (a, b) { return (a + 6) % 7 - (b + 6) % 7; }).map(function (i) { return DOW[i]; }).join('·'); }
   function dayDiff(a, b) { return Math.round((parseKey(b) - parseKey(a)) / 864e5); }
   function toMin(t) { if (!t) return null; var p = t.split(':').map(Number); return p[0] * 60 + p[1]; }
   function endMin(t) { var m = toMin(t); return m === 0 ? 1440 : m; } // 끝 시각 00:00 = 자정(24:00)
@@ -115,7 +118,10 @@
   function cats() { return (S.settings.cats && S.settings.cats.length) ? S.settings.cats : DEFAULT_CATS; }
   function catOf(id) { var c = cats(); for (var i = 0; i < c.length; i++) if (c[i].id === id) return c[i]; return c[0]; }
   function weekKey() { return keyOf(S.week); }
-  function monthOfWeek() { return addDays(S.week, 4); } // 그 주 목요일이 속한 달
+  function monthOfWeek() { return addDays(S.week, 3); } // 그 주 목요일이 속한 달
+  // 예전(일요일 시작) 버전에서 저장한 주 단위 값은 하루 앞(일요일) 날짜로 저장돼 있어요
+  function legacyWeekKey() { return keyOf(addDays(S.week, -1)); }
+  function weekVal(obj) { obj = obj || {}; var v = obj[weekKey()]; return v != null ? v : obj[legacyWeekKey()]; }
   function monthKey() { return monthKeyOf(monthOfWeek()); }
   function hours() {
     var hs = Number(S.settings.hourStart), he = Number(S.settings.hourEnd);
@@ -343,7 +349,7 @@
       $('#prevBtn').setAttribute('aria-label', '지난 주');
       $('#nextBtn').setAttribute('aria-label', '다음 주');
       var goal = $('#goalInput');
-      if (document.activeElement !== goal) goal.value = (S.settings.goals || {})[weekKey()] || '';
+      if (document.activeElement !== goal) goal.value = weekVal(S.settings.goals) || '';
     }
     $('#goalRow').hidden = month;
     $('#viewWeek').setAttribute('aria-checked', !month);
@@ -352,7 +358,7 @@
       return '<span><i class="sw" style="background:' + tint(c.color) + ';border-color:' + esc(c.color) + '"></i>' + esc(c.name) + '</span>';
     }).join('');
     $('#modeBadge').hidden = S.mode !== 'local';
-    var wrapped = (S.settings.wrapped || {})[weekKey()];
+    var wrapped = weekVal(S.settings.wrapped);
     var wb = $('#wrapBtn');
     wb.hidden = month;
     wb.textContent = wrapped ? '✓ 마무리함' : '한 주 마무리';
@@ -388,8 +394,9 @@
       var d = parseKey(k);
       var list = occ[i], dn = list.filter(function (o) { return o.done; }).length;
       doneTotal += dn; allTotal += list.length;
+      var dw = d.getDay();
       html += '<div class="tt-head' + (k === tk ? ' is-today' : '') + '">' +
-        '<div class="d1"><span class="dow' + (i === 0 ? ' sun' : i === 6 ? ' sat' : '') + '">' + DOW[i] + '</span>' +
+        '<div class="d1"><span class="dow' + (dw === 0 ? ' sun' : dw === 6 ? ' sat' : '') + '">' + DOW[dw] + '</span>' +
         '<span class="date">' + pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + '</span></div>' +
         '<span class="sum">' + (list.length ? list.length + '개 · ' + dn + ' 완료' : '일정 없음') + '</span></div>';
     });
@@ -427,7 +434,8 @@
 
     // 요일 칸
     keys.forEach(function (k, i) {
-      var cls = 'tt-col' + (i === 0 || i === 6 ? ' weekend' : '') + (k === tk ? ' is-today' : '');
+      var dw2 = parseKey(k).getDay();
+      var cls = 'tt-col' + (dw2 === 0 || dw2 === 6 ? ' weekend' : '') + (k === tk ? ' is-today' : '');
       html += '<div class="' + cls + '" data-date="' + k + '" style="--rows:' + rows + '">';
       layoutDay(timed[i]).forEach(function (it) {
         var ev = it.o.ev, c = catOf(ev.cat);
@@ -494,7 +502,7 @@
     var keys = [];
     for (var d = start; d <= end; d = addDays(d, 1)) keys.push(keyOf(d));
     var occ = occurrencesFor(keys), tk = todayKey(), m = first.getMonth();
-    var html = '<div class="mo-head">' + DOW.map(function (n, i) { return '<div class="' + (i === 0 ? 'sun' : i === 6 ? 'sat' : '') + '">' + n + '</div>'; }).join('') + '</div>';
+    var html = '<div class="mo-head">' + WEEK_ORDER.map(function (i) { return '<div class="' + (i === 0 ? 'sun' : i === 6 ? 'sat' : '') + '">' + DOW[i] + '</div>'; }).join('') + '</div>';
     for (var w = 0; w < keys.length; w += 7) {
       html += '<div class="mo-week">';
       for (var i = w; i < w + 7; i++) {
@@ -528,7 +536,7 @@
 
     var memo = $('#memoInput');
     memo.closest('.side-sec').hidden = S.view === 'month';
-    if (document.activeElement !== memo) memo.value = (S.settings.memos || {})[weekKey()] || '';
+    if (document.activeElement !== memo) memo.value = weekVal(S.settings.memos) || '';
 
     // 시간 통계
     var keys;
@@ -545,7 +553,7 @@
     if (S.editingTask) return; // 수정 중에는 목록을 다시 그리지 않음
     var period = S.tab === 'week' ? weekKey() : mk;
     var list = Array.from(S.tasks.values())
-      .filter(function (t) { return t.scope === S.tab && t.period === period; })
+      .filter(function (t) { return t.scope === S.tab && (t.period === period || (S.tab === 'week' && t.period === legacyWeekKey())); })
       .sort(function (a, b) { return (a.created || 0) - (b.created || 0); });
     var SIG = { todo: '•', done: '×', moved: '&gt;', later: '&lt;' };
     var html = list.map(function (t) {
@@ -658,7 +666,8 @@
     $('#onceBox').hidden = weekly;
     $('#weeklyBox').hidden = !weekly;
     $('#rangeBox').hidden = !weekly;
-    $('#dayChips').innerHTML = DOW.map(function (d, i) {
+    $('#dayChips').innerHTML = WEEK_ORDER.map(function (i) {
+      var d = DOW[i];
       return '<button type="button" data-day="' + i + '" class="' + (i === 0 ? 'sun' : i === 6 ? 'sat' : '') + '" aria-pressed="' + (E.days.indexOf(i) >= 0) + '">' + d + '</button>';
     }).join('');
     var untimed = !dl && $('#fUntimed').checked, openEnd = $('#fOpenEnd').checked;
@@ -677,7 +686,8 @@
     var time = dl ? (s || '23:59') + ' 마감'
       : untimed ? '시간 미정' : (s ? s + (openEnd ? '~ (끝 미정)' : (e ? '–' + (e === '00:00' ? '24:00' : e) : '')) : '시간을 정해 주세요');
     if (E.mode === 'weekly') {
-      var days = E.days.slice().sort().map(function (i) { return DOW[i]; });
+      if (!E.days.length) return '반복할 요일을 골라 주세요';
+      var days = [dayLabels(E.days)];
       if (!days.length) return '반복할 요일을 골라 주세요';
       var from = $('#fFrom').value, until = $('#fUntil').value;
       var range = (from ? mdDow(from) + '부터' : '') + (until ? ' ' + mdDow(until) + '까지' : ' 계속');
@@ -996,7 +1006,7 @@
         if (!o.done && o.date <= tk && o.ev.repeat !== 'weekly') missed.push(o);
       });
     });
-    var tasks = Array.from(S.tasks.values()).filter(function (t) { return t.scope === 'week' && t.period === weekKey(); });
+    var tasks = Array.from(S.tasks.values()).filter(function (t) { return t.scope === 'week' && (t.period === weekKey() || t.period === legacyWeekKey()); });
     var tDone = tasks.filter(function (t) { return t.state === 'done' || t.state === 'moved'; }).length;
     var tLeft = tasks.filter(function (t) { return (t.state || 'todo') === 'todo'; });
     var num = function (b, a, l) { return '<div class="wrap-num"><b>' + b + ' / ' + a + '</b><span>' + l + '</span></div>'; };
@@ -1008,8 +1018,8 @@
     $('#wrapCarry').innerHTML = wrapItems.length ? wrapItems.map(function (it, i) {
       return '<li><label><input type="checkbox" data-i="' + i + '"' + (it.checked ? ' checked' : '') + '><span>' + esc(it.label) + '</span><span class="src">' + esc(it.src) + '</span></label></li>';
     }).join('') : '<li class="empty">옮길 것이 없어요. 이번 주 할 일을 모두 정리했어요.</li>';
-    $('#wrapReview').value = (S.settings.reviews || {})[weekKey()] || '';
-    var wrapped = (S.settings.wrapped || {})[weekKey()];
+    $('#wrapReview').value = weekVal(S.settings.reviews) || '';
+    var wrapped = weekVal(S.settings.wrapped);
     $('#wrapDo').textContent = wrapped ? '다시 저장' : '마무리하기';
     $('#wrapDialog').showModal();
   }
@@ -1161,7 +1171,7 @@
   }
   function whenText(ev) {
     var w = ev.repeat === 'weekly'
-      ? '매주 ' + (ev.days || []).map(function (i) { return DOW[i]; }).join('·')
+      ? '매주 ' + dayLabels(ev.days || [])
       : (ev.date ? mdDow(ev.date) : '');
     return w + ' · ' + evTimeText(ev) + (ev.place ? ' · ' + ev.place : '');
   }
@@ -1196,7 +1206,7 @@
       if (Array.isArray(set.w)) {
         var days = set.w.map(Number).filter(function (x) { return x >= 0 && x <= 6; }).sort();
         if (!days.length) return { bad: '반복 요일을 읽을 수 없어요' };
-        put('days', days, '요일', days.map(function (i) { return DOW[i]; }).join('·'));
+        put('days', days, '요일', dayLabels(days));
       }
       if (set.f != null) { if (!isDateKey(set.f)) return { bad: '반복 시작일을 읽을 수 없어요' }; put('from', set.f, '반복 시작일', mdDow(set.f)); }
       if (set.l !== undefined) {
@@ -1214,7 +1224,7 @@
     if (x.todo) {
       var month = !!x.month;
       var base = isDateKey(x.d) ? parseKey(x.d) : new Date();
-      var period = month ? monthKeyOf(addDays(startOfWeek(base), 4)) : keyOf(startOfWeek(base));
+      var period = month ? monthKeyOf(addDays(startOfWeek(base), 3)) : keyOf(startOfWeek(base));
       var task = { id: id, text: String(x.todo).slice(0, 200), state: 'todo', scope: month ? 'month' : 'week', period: period, created: Date.now() };
       return [{
         kind: 'task', obj: task, exists: S.tasks.has(id),
@@ -1247,7 +1257,7 @@
       if (!ev.days.length) return [{ bad: title + ': 반복 요일을 읽을 수 없어요' }];
       ev.from = isDateKey(x.f) ? x.f : (isDateKey(x.d) ? x.d : todayKey());
       ev.until = isDateKey(x.l) ? x.l : null;
-      when = '매주 ' + ev.days.map(function (i) { return DOW[i]; }).join('·') + ' · ' + mdDow(ev.from) + '부터' + (ev.until ? ' ' + mdDow(ev.until) + '까지' : '');
+      when = '매주 ' + dayLabels(ev.days) + ' · ' + mdDow(ev.from) + '부터' + (ev.until ? ' ' + mdDow(ev.until) + '까지' : '');
     } else {
       if (!isDateKey(x.d)) return [{ bad: title + ': 날짜가 없어요' }];
       ev.date = x.d;
@@ -1657,7 +1667,7 @@
   /* ---------------- 미리보기용 예시 데이터 ---------------- */
   function seedDemo(raw) {
     var w = startOfWeek(new Date());
-    function k(i) { return keyOf(addDays(w, i)); }
+    function k(dow) { return keyOf(addDays(w, (dow + 6) % 7)); } // 요일(0=일) → 이번 주 날짜
     var past = todayKey();
     function ev(day, title, start, end, cat, place, weekly) {
       var e = { id: newId(), kind: 'event', title: title, start: start, end: end, cat: cat, place: place || '', memo: '', untimed: false, openEnd: false, done: {}, skip: {}, created: Date.now() };
