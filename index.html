@@ -115,6 +115,18 @@
         </div>
       </section>
 
+      <section class="side-sec" aria-labelledby="hbHead">
+        <div class="hb-top">
+          <div class="hb-title"><h2 class="side-h" id="hbHead">매일 체크</h2><span id="hbDate" class="hb-date"></span></div>
+          <div class="pill-tabs" role="tablist" aria-label="매일 체크 보기">
+            <button id="hbTabToday" role="tab" type="button">오늘</button>
+            <button id="hbTabWeek" role="tab" type="button">이번 주</button>
+          </div>
+        </div>
+        <div id="hbBody"></div>
+        <button id="hbAdd" type="button" class="pill-add">+ 습관 추가</button>
+      </section>
+
       <section class="side-sec">
         <h2 class="side-h" id="statsHead">이번 주 시간</h2>
         <div id="stats"></div>
@@ -226,6 +238,10 @@
       <p class="muted small">체크한 항목은 다음 주 할 일 모음으로 옮겨져요. 이번 주 목록에는 <b class="c-later">&lt;</b> 미룸으로 남아요.</p>
       <ul id="wrapCarry" class="wrap-carry"></ul>
     </section>
+    <section class="set-sec" id="wrapHabitsSec">
+      <h3>습관</h3>
+      <ul id="wrapHabits" class="wrap-habits"></ul>
+    </section>
     <section class="set-sec">
       <label for="wrapReview"><h3>한 주 돌아보기</h3></label>
       <textarea id="wrapReview" rows="4" placeholder="잘 된 것, 아쉬운 것, 다음 주에 바꿀 것"></textarea>
@@ -235,6 +251,48 @@
     <button type="button" class="btn btn-ghost" data-close>닫기</button>
     <button type="button" id="wrapDo" class="btn btn-primary">마무리하기</button>
   </div>
+</dialog>
+
+<!-- 습관 추가/수정 -->
+<dialog id="habitDialog" class="dlg" aria-labelledby="habitHeading">
+  <form id="habitForm" method="dialog" novalidate>
+    <div class="dlg-head">
+      <h2 id="habitHeading">습관 추가</h2>
+      <button type="button" class="icon-btn" data-close aria-label="닫기"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"/></svg></button>
+    </div>
+    <div class="dlg-body">
+      <div class="field">
+        <label for="hName">이름</label>
+        <input id="hName" type="text" maxlength="40" placeholder="예: 운동, 영어 단어, 성경 읽기">
+      </div>
+      <div class="when">
+        <span class="field-label">하는 요일</span>
+        <div class="seg-toggle" role="radiogroup" aria-label="하는 요일" id="hModes">
+          <button type="button" role="radio" data-mode="daily">매일</button>
+          <button type="button" role="radio" data-mode="weekday">평일만</button>
+          <button type="button" role="radio" data-mode="pick">직접 고르기</button>
+        </div>
+        <div id="hDays" class="day-chips"></div>
+        <p id="hSummary" class="summary"></p>
+      </div>
+      <div class="field">
+        <span class="field-label">색</span>
+        <div id="hColors" class="color-dots"></div>
+      </div>
+      <div class="field">
+        <label for="hFrom">시작일</label>
+        <input id="hFrom" type="date">
+      </div>
+      <p class="muted small">그만두는 습관은 <b>보관</b>하면 숨겨지고 지난 기록은 남아요. 보관한 습관은 ⚙️ 설정에서 다시 꺼낼 수 있어요.</p>
+      <p id="hError" class="error" role="alert" hidden></p>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" id="hDelete" class="btn btn-danger-text">삭제</button>
+      <button type="button" id="hArchive" class="btn btn-ghost">보관</button>
+      <button type="button" class="btn btn-ghost" data-close>취소</button>
+      <button type="submit" class="btn btn-primary">저장</button>
+    </div>
+  </form>
 </dialog>
 
 <!-- 설정 -->
@@ -257,6 +315,10 @@
       <h3>카테고리 · 색</h3>
       <div id="catRows" class="cat-rows"></div>
       <button type="button" id="addCat" class="btn btn-soft btn-sm">+ 카테고리 추가</button>
+    </section>
+    <section class="set-sec" id="archivedSec" hidden>
+      <h3>보관한 습관</h3>
+      <ul id="archivedHabits" class="wrap-habits"></ul>
     </section>
     <section class="set-sec">
       <h3>시간표 범위</h3>

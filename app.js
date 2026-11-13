@@ -102,6 +102,8 @@
     tab: 'week',
     events: new Map(),
     tasks: new Map(),
+    habits: new Map(),
+    habitTab: 'today',
     settings: defaultSettings(),
     mode: 'local',
     user: null,
@@ -135,7 +137,7 @@
     var raw = null;
     try { raw = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { raw = null; }
     if (!raw) {
-      raw = { events: [], tasks: [], settings: defaultSettings() };
+      raw = { events: [], tasks: [], habits: [], settings: defaultSettings() };
       if (window.WJ_DEMO) seedDemo(raw);
     }
     function save() {
@@ -143,6 +145,7 @@
         localStorage.setItem(KEY, JSON.stringify({
           events: Array.from(S.events.values()),
           tasks: Array.from(S.tasks.values()),
+          habits: Array.from(S.habits.values()),
           settings: S.settings
         }));
       } catch (e) { /* 저장 불가(사생활 보호 모드 등) — 화면에는 남음 */ }
@@ -151,6 +154,7 @@
       start: function () {
         S.events = new Map(raw.events.map(function (e) { return [e.id, e]; }));
         S.tasks = new Map(raw.tasks.map(function (t) { return [t.id, t]; }));
+        S.habits = new Map((raw.habits || []).map(function (h) { return [h.id, h]; }));
         S.settings = Object.assign(defaultSettings(), raw.settings || {});
         S.ready = true;
         S.loaded = true;
@@ -160,6 +164,8 @@
       delEvent: function (id) { S.events.delete(id); save(); render(); },
       putTask: function (t) { S.tasks.set(t.id, t); save(); render(); },
       delTask: function (id) { S.tasks.delete(id); save(); render(); },
+      putHabit: function (h) { S.habits.set(h.id, h); save(); render(); },
+      delHabit: function (id) { S.habits.delete(id); save(); render(); },
       putSettings: function (p) { Object.assign(S.settings, p); save(); render(); }
     };
   }
@@ -196,6 +202,8 @@
         delEvent: function (id) { S.events.delete(id); render(); fs.deleteDoc(fs.doc(col('events'), id)).catch(fail); },
         putTask: function (t) { S.tasks.set(t.id, t); render(); fs.setDoc(fs.doc(col('tasks'), t.id), plain(t)).catch(fail); },
         delTask: function (id) { S.tasks.delete(id); render(); fs.deleteDoc(fs.doc(col('tasks'), id)).catch(fail); },
+        putHabit: function (h) { S.habits.set(h.id, h); render(); fs.setDoc(fs.doc(col('habits'), h.id), plain(h)).catch(fail); },
+        delHabit: function (id) { S.habits.delete(id); render(); fs.deleteDoc(fs.doc(col('habits'), id)).catch(fail); },
         putSettings: function (p) {
           Object.assign(S.settings, p); render();
           fs.setDoc(settingsRef(), plain(p), { merge: true }).catch(fail);
@@ -208,7 +216,7 @@
         S.user = user;
         if (!user) { S.ready = false; showScreen('login'); return; }
         uid = user.uid;
-        S.events = new Map(); S.tasks = new Map(); S.settings = defaultSettings();
+        S.events = new Map(); S.tasks = new Map(); S.habits = new Map(); S.settings = defaultSettings();
         S.ready = true;
         S.loaded = false;
         var gotEvents = false, gotTasks = false;
@@ -222,6 +230,10 @@
         unsubs.push(fs.onSnapshot(col('tasks'), function (snap) {
           S.tasks = new Map(snap.docs.map(function (d) { return [d.id, d.data()]; }));
           gotTasks = true; S.loaded = gotEvents && gotTasks;
+          render();
+        }, fail));
+        unsubs.push(fs.onSnapshot(col('habits'), function (snap) {
+          S.habits = new Map(snap.docs.map(function (d) { return [d.id, d.data()]; }));
           render();
         }, fail));
         unsubs.push(fs.onSnapshot(settingsRef(), function (d) {
@@ -549,6 +561,7 @@
       $('#statsHead').textContent = keyOf(startOfWeek(new Date())) === weekKey() ? '이번 주 시간' : '이 주의 시간';
     }
     $('#stats').innerHTML = statsHtml(categoryStats(keys));
+    renderHabits();
 
     if (S.editingTask) return; // 수정 중에는 목록을 다시 그리지 않음
     var period = S.tab === 'week' ? weekKey() : mk;
@@ -992,6 +1005,146 @@
     input.addEventListener('blur', function () { finish(true); });
   }
 
+  /* ---------------- 매일 체크 (습관) ----------------
+   * 습관: { id, name, color, days:[0=일 … 6=토], from:'YYYY-MM-DD', archived, checks:{ 'YYYY-MM-DD': true }, order, created }
+   */
+  var HABIT_COLORS = [['주황', '#d0603a'], ['보라', '#7a5cc0'], ['초록', '#2f7a55'], ['노랑', '#c08a2e'], ['파랑', '#4a72b0'], ['분홍', '#b0485f']];
+  function habitList(includeArchived) {
+    return Array.from(S.habits.values())
+      .filter(function (h) { return includeArchived || !h.archived; })
+      .sort(function (a, b) { return (a.order || 0) - (b.order || 0) || (a.created || 0) - (b.created || 0); });
+  }
+  function habitOn(h, k) {
+    if (h.from && k < h.from) return false;
+    return (h.days || [0, 1, 2, 3, 4, 5, 6]).indexOf(parseKey(k).getDay()) >= 0;
+  }
+  function habitSoft(hex, amt) { return isDark() ? mix(hex, '#171d28', 0.74) : mix(hex, '#ffffff', amt == null ? 0.9 : amt); }
+  // 오늘(안 했으면 어제)부터 거꾸로, 해야 하는 날을 연달아 한 횟수
+  function habitStreak(h) {
+    var tk = todayKey(), d = parseKey(tk), n = 0, checks = h.checks || {};
+    if (habitOn(h, tk) && !checks[tk]) d = addDays(d, -1);
+    for (var i = 0; i < 400; i++) {
+      var k = keyOf(d);
+      if (h.from && k < h.from) break;
+      if (habitOn(h, k)) { if (checks[k]) n++; else break; }
+      d = addDays(d, -1);
+    }
+    return n;
+  }
+  function weekHabitRows(keys) {
+    return habitList().map(function (h) {
+      var total = 0, done = 0;
+      keys.forEach(function (k) { if (habitOn(h, k)) { total++; if ((h.checks || {})[k]) done++; } });
+      return { h: h, total: total, done: done };
+    }).filter(function (r) { return r.total > 0; });
+  }
+  function toggleHabit(id, k) {
+    var h = S.habits.get(id); if (!h) return;
+    var checks = Object.assign({}, h.checks || {});
+    if (checks[k]) delete checks[k]; else checks[k] = true;
+    store.putHabit(Object.assign({}, h, { checks: checks }));
+  }
+  var CHECK_SVG = '<svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2.5 6.3 2.4 2.4 4.6-5"/></svg>';
+  var FLAME_SVG = '<svg width="9" height="10" viewBox="0 0 10 12" aria-hidden="true"><path d="M5 .5C5.6 2.6 8.5 4 8.5 7.3A3.5 3.5 0 0 1 1.5 7.3c0-1.4.7-2.4 1.5-3 .1 1 .6 1.6 1.2 1.8C4 4.3 4.2 2.3 5 .5Z" fill="currentColor"/></svg>';
+  function renderHabits() {
+    var tk = todayKey();
+    var all = habitList();
+    $('#hbDate').textContent = md(parseKey(tk)) + ' ' + DOW[parseKey(tk).getDay()];
+    $('#hbTabToday').setAttribute('aria-selected', S.habitTab === 'today');
+    $('#hbTabWeek').setAttribute('aria-selected', S.habitTab === 'week');
+    var box = $('#hbBody');
+    if (!all.length) {
+      box.innerHTML = '<p class="hb-empty">매일 하는 일을 습관으로 추가하면 여기서 체크할 수 있어요.</p>';
+      return;
+    }
+    if (S.habitTab === 'today') {
+      var list = all.filter(function (h) { return habitOn(h, tk); });
+      var rest = all.filter(function (h) { return !habitOn(h, tk); });
+      var html = list.length ? '<div class="hb-grid">' + list.map(function (h) {
+        var done = !!(h.checks || {})[tk], st = habitStreak(h);
+        return '<button type="button" class="hb-tile' + (done ? ' is-done' : '') + '" data-habit="' + esc(h.id) + '" data-date="' + tk + '" aria-pressed="' + done + '"' +
+          ' style="--hc:' + esc(h.color) + ';--hc-soft:' + habitSoft(h.color) + ';--hc-line:' + habitSoft(h.color, 0.35) + '">' +
+          '<span class="hb-box">' + (done ? CHECK_SVG : '') + '</span>' +
+          '<span class="hb-txt"><span class="hb-name">' + esc(h.name) + '</span>' +
+          (st >= 2 ? '<span class="hb-streak">' + FLAME_SVG + st + '일 연속</span>' : '<span class="hb-sub">' + (done ? '오늘 완료' : '오늘 할 일') + '</span>') +
+          '</span></button>';
+      }).join('') + '</div>' : '<p class="hb-empty">오늘은 쉬는 날이에요.</p>';
+      if (rest.length) html += '<p class="hb-rest">오늘 쉬는 습관: ' + rest.map(function (h) { return esc(h.name); }).join(', ') + '</p>';
+      box.innerHTML = html;
+    } else {
+      var keys = weekKeys();
+      var head = '<div class="hb-row hb-head"><span></span>' + keys.map(function (k) {
+        return '<span class="' + (k === tk ? 'is-today' : '') + '">' + DOW[parseKey(k).getDay()] + '</span>';
+      }).join('') + '<span></span></div>';
+      var rows = all.map(function (h, i) {
+        var total = 0, cnt = 0;
+        var cells = keys.map(function (k) {
+          var on = habitOn(h, k), done = !!(h.checks || {})[k];
+          if (on) { total++; if (done) cnt++; }
+          var lbl = h.name + ' ' + mdDow(k);
+          if (!on) return '<span class="hb-cell"><i class="hb-off"></i></span>';
+          if (k > tk) return '<span class="hb-cell" title="' + esc(lbl) + '"><i class="hb-future"></i></span>';
+          return '<button type="button" class="hb-cell" data-habit="' + esc(h.id) + '" data-date="' + k + '" aria-label="' + esc(lbl + (done ? ' 완료 취소' : ' 완료 표시')) + '">' +
+            '<i class="hb-dot' + (done ? ' is-done' : '') + (k === tk ? ' is-today' : '') + '"></i></button>';
+        }).join('');
+        return '<div class="hb-row' + (i % 2 ? '' : ' alt') + '" style="--hc:' + esc(h.color) + ';--hc-soft:' + habitSoft(h.color, 0.75) + ';--hc-line:' + habitSoft(h.color, 0.3) + '">' +
+          '<button type="button" class="hb-label" data-edit-habit="' + esc(h.id) + '" title="눌러서 습관 고치기"><i></i><span>' + esc(h.name) + '</span></button>' +
+          cells + '<span class="hb-rate">' + (total ? cnt + '/' + total : '–') + '</span></div>';
+      }).join('');
+      box.innerHTML = '<div class="hb-week">' + head + rows + '</div><p class="hb-rest">습관 이름을 누르면 고칠 수 있어요. 지난 날도 눌러서 체크할 수 있어요.</p>';
+    }
+  }
+
+  // 습관 추가/수정 창
+  var HE = null;
+  function openHabitEditor(id) {
+    var h = id ? S.habits.get(id) : null;
+    var days = h ? (h.days || [0, 1, 2, 3, 4, 5, 6]).slice() : [0, 1, 2, 3, 4, 5, 6];
+    HE = { id: h ? h.id : null, days: days, color: h ? h.color : HABIT_COLORS[S.habits.size % HABIT_COLORS.length][1], mode: daysMode(days) };
+    $('#habitHeading').textContent = h ? '습관 고치기' : '습관 추가';
+    $('#hName').value = h ? h.name : '';
+    $('#hFrom').value = h && h.from ? h.from : todayKey();
+    $('#hArchive').hidden = !h;
+    $('#hDelete').hidden = !h;
+    $('#hError').hidden = true;
+    renderHabitEditor();
+    $('#habitDialog').showModal();
+    if (!h) $('#hName').focus();
+  }
+  function daysMode(days) {
+    var s = days.slice().sort().join(',');
+    return s === '0,1,2,3,4,5,6' ? 'daily' : s === '1,2,3,4,5' ? 'weekday' : 'pick';
+  }
+  function renderHabitEditor() {
+    $('#hModes').querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-checked', b.dataset.mode === HE.mode); });
+    $('#hDays').innerHTML = WEEK_ORDER.map(function (i) {
+      return '<button type="button" data-day="' + i + '" class="' + (i === 0 ? 'sun' : i === 6 ? 'sat' : '') + '" aria-pressed="' + (HE.days.indexOf(i) >= 0) + '">' + DOW[i] + '</button>';
+    }).join('');
+    $('#hColors').innerHTML = HABIT_COLORS.map(function (c) {
+      return '<button type="button" data-color="' + c[1] + '" aria-label="' + c[0] + '" aria-pressed="' + (HE.color === c[1]) + '" style="--c:' + c[1] + '"></button>';
+    }).join('');
+    $('#hSummary').textContent = !HE.days.length ? '요일을 골라 주세요'
+      : HE.mode === 'daily' ? '매일 체크해요'
+      : HE.mode === 'weekday' ? '월~금 체크해요'
+      : '매주 ' + dayLabels(HE.days) + ' 체크해요 (일주일에 ' + HE.days.length + '번)';
+  }
+  function saveHabit() {
+    var err = function (m) { $('#hError').textContent = m; $('#hError').hidden = false; };
+    var name = $('#hName').value.trim();
+    if (!name) return err('습관 이름을 적어 주세요.');
+    if (!HE.days.length) return err('체크할 요일을 하나 이상 골라 주세요.');
+    var from = $('#hFrom').value || todayKey();
+    var old = HE.id ? S.habits.get(HE.id) : null;
+    var maxOrder = habitList(true).reduce(function (m, h) { return Math.max(m, h.order || 0); }, 0);
+    store.putHabit({
+      id: HE.id || newId(), name: name.slice(0, 40), color: HE.color, days: HE.days.slice().sort(), from: from,
+      archived: old ? !!old.archived : false, checks: old && old.checks ? old.checks : {},
+      order: old ? (old.order || 0) : maxOrder + 1, created: old && old.created ? old.created : Date.now()
+    });
+    $('#habitDialog').close();
+    toast(old ? '습관을 고쳤어요' : '습관을 추가했어요');
+  }
+
   /* ---------------- 한 주 마무리 ---------------- */
   var wrapItems = [];
   function openWrap() {
@@ -1013,6 +1166,11 @@
     $('#wrapHeading').textContent = mdDow(keys[0]) + ' – ' + mdDow(keys[6]) + ' 마무리';
     $('#wrapNums').innerHTML = num(evDone, evAll, '일정 완료') + num(dlDone, dlAll, '마감 완료') + num(tDone, tasks.length, '할 일 완료');
     $('#wrapStats').innerHTML = statsHtml(categoryStats(keys));
+    var hRows = weekHabitRows(keys);
+    $('#wrapHabitsSec').hidden = !hRows.length;
+    $('#wrapHabits').innerHTML = hRows.map(function (r) {
+      return '<li><i style="background:' + esc(r.h.color) + '"></i><span>' + esc(r.h.name) + '</span><b>' + r.done + ' / ' + r.total + '</b></li>';
+    }).join('');
     wrapItems = tLeft.map(function (t) { return { type: 'task', t: t, checked: true, label: t.text, src: '할 일' }; })
       .concat(missed.map(function (o) { return { type: 'event', o: o, checked: false, label: o.ev.title, src: (isDeadline(o.ev) ? '놓친 마감 · ' : '놓친 일정 · ') + mdDow(o.date) }; }));
     $('#wrapCarry').innerHTML = wrapItems.length ? wrapItems.map(function (it, i) {
@@ -1050,6 +1208,7 @@
     draftCats = clone(cats());
     renderCatRows();
     renderThemeToggle();
+    renderArchived();
     var hs = $('#hourStart'), he = $('#hourEnd'), o1 = '', o2 = '';
     for (var h = 0; h <= 23; h++) o1 += '<option value="' + h + '">' + pad(h) + ':00</option>';
     for (var h2 = 1; h2 <= 24; h2++) o2 += '<option value="' + h2 + '">' + pad(h2) + ':00</option>';
@@ -1063,6 +1222,13 @@
       $('#logoutBtn').hidden = true;
     }
     if (!$('#setDialog').open) $('#setDialog').showModal();
+  }
+  function renderArchived() {
+    var arch = habitList(true).filter(function (h) { return h.archived; });
+    $('#archivedSec').hidden = !arch.length;
+    $('#archivedHabits').innerHTML = arch.map(function (h) {
+      return '<li><i style="background:' + esc(h.color) + '"></i><span>' + esc(h.name) + '</span><button type="button" class="btn btn-soft btn-sm" data-restore="' + esc(h.id) + '">다시 꺼내기</button></li>';
+    }).join('');
   }
   function renderThemeToggle() {
     var p = themePref();
@@ -1080,7 +1246,7 @@
   function exportData() {
     var data = {
       app: 'weekly-journal', version: 1, exportedAt: new Date().toISOString(),
-      events: Array.from(S.events.values()), tasks: Array.from(S.tasks.values()), settings: S.settings
+      events: Array.from(S.events.values()), tasks: Array.from(S.tasks.values()), habits: Array.from(S.habits.values()), settings: S.settings
     };
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     var a = document.createElement('a');
@@ -1104,6 +1270,7 @@
           if (!res) return;
           data.events.forEach(function (e) { if (e && e.id) store.putEvent(e); });
           data.tasks.forEach(function (t) { if (t && t.id) store.putTask(t); });
+          (data.habits || []).forEach(function (h) { if (h && h.id) store.putHabit(h); });
           if (data.settings) store.putSettings(data.settings);
           toast('백업을 불러왔어요');
         });
@@ -1220,6 +1387,8 @@
   function normalizeLinkItem(x) {
     if (!x || typeof x !== 'object') return [{ bad: '읽을 수 없는 항목' }];
     if (x.op === 'edit' || x.op === 'del') return normalizeOp(x);
+    if (x.op === 'check') return normalizeHabitCheck(x);
+    if (x.habit) return normalizeHabitAdd(x);
     var id = 'lnk-' + hashStr(JSON.stringify(x));
     if (x.todo) {
       var month = !!x.month;
@@ -1293,14 +1462,57 @@
       return Object.assign(base, { kind: 'edit', next: r.ev, flag: ev.repeat === 'weekly' ? '수정 (반복 전체)' : '수정', changes: r.changes });
     });
   }
+  function findHabit(name) {
+    var n = normTitle(name), list = habitList();
+    var hit = list.filter(function (h) { return normTitle(h.name) === n; });
+    if (!hit.length) hit = list.filter(function (h) { return normTitle(h.name).indexOf(n) >= 0; });
+    return hit[0] || null;
+  }
+  function habitColor(c, i) {
+    if (typeof c === 'string') {
+      if (/^#[0-9a-f]{6}$/i.test(c)) return c;
+      for (var j = 0; j < HABIT_COLORS.length; j++) if (HABIT_COLORS[j][0] === c) return HABIT_COLORS[j][1];
+    }
+    return HABIT_COLORS[(S.habits.size + i) % HABIT_COLORS.length][1];
+  }
+  var habitAddCount = 0;
+  function normalizeHabitAdd(x) {
+    var name = String(x.habit).trim().slice(0, 40);
+    if (!name) return [{ bad: '이름 없는 습관' }];
+    var days = Array.isArray(x.w) && x.w.length ? x.w.map(Number).filter(function (d) { return d >= 0 && d <= 6; }).sort() : [0, 1, 2, 3, 4, 5, 6];
+    if (!days.length) return [{ bad: name + ': 요일을 읽을 수 없어요' }];
+    var id = 'lnk-' + hashStr('habit' + name);
+    var color = habitColor(x.c, habitAddCount++);
+    var same = habitList().some(function (h) { return normTitle(h.name) === normTitle(name); });
+    var maxOrder = habitList(true).reduce(function (m, h) { return Math.max(m, h.order || 0); }, 0);
+    var h = { id: id, name: name, color: color, days: days, from: isDateKey(x.f) ? x.f : todayKey(), archived: false, checks: {}, order: maxOrder + habitAddCount, created: Date.now() };
+    return [{
+      kind: 'habit', obj: h, exists: S.habits.has(id) || same, flag: S.habits.has(id) || same ? '이미 있는 습관' : '습관 추가',
+      cat: { color: color }, title: name,
+      meta: (daysMode(days) === 'daily' ? '매일' : daysMode(days) === 'weekday' ? '평일(월~금)' : '매주 ' + dayLabels(days)) + ' · ' + mdDow(h.from) + '부터'
+    }];
+  }
+  function normalizeHabitCheck(x) {
+    var h = findHabit(x.habit || x.find);
+    if (!h) return [{ bad: '"' + (x.habit || x.find || '') + '" 습관을 찾지 못했어요' }];
+    var d = isDateKey(x.d) ? x.d : todayKey();
+    var want = x.done !== false;
+    var cur = !!(h.checks || {})[d];
+    return [{
+      kind: 'hcheck', habitId: h.id, date: d, want: want, exists: cur === want,
+      flag: cur === want ? (want ? '이미 체크됨' : '이미 체크 안 됨') : (want ? '체크' : '체크 취소'),
+      cat: { color: h.color }, title: h.name, meta: mdDow(d)
+    }];
+  }
   var linkItems = [];
   function showLinkDialog() {
     var p = pendingLink; pendingLink = null;
     if (p.bad) { toast('링크 내용을 읽지 못했어요. 링크가 잘렸는지 확인해 주세요.'); return; }
     linkItems = [];
+    habitAddCount = 0;
     p.items.forEach(function (x) { linkItems = linkItems.concat(normalizeLinkItem(x)); });
     var ok = linkItems.filter(function (it) { return !it.bad && !it.exists; });
-    var hasOps = ok.some(function (it) { return it.kind === 'edit' || it.kind === 'del'; });
+    var hasOps = ok.some(function (it) { return it.kind === 'edit' || it.kind === 'del' || it.kind === 'hcheck'; });
     $('#linkHeading').textContent = hasOps ? '링크로 받은 변경' : '링크로 받은 일정';
     $('#linkList').innerHTML = linkItems.map(function (it) {
       if (it.bad) return '<li class="link-item is-skip is-bad"><span class="li-flag">적용할 수 없어요</span><span class="li-meta">' + esc(it.bad) + '</span></li>';
@@ -1325,6 +1537,13 @@
     linkItems.forEach(function (it) {
       if (it.bad || it.exists) return;
       if (it.kind === 'task') { store.putTask(it.obj); n++; return; }
+      if (it.kind === 'habit') { store.putHabit(it.obj); n++; return; }
+      if (it.kind === 'hcheck') {
+        var hh = S.habits.get(it.habitId); if (!hh) return;
+        var ch = Object.assign({}, hh.checks || {});
+        if (it.want) ch[it.date] = true; else delete ch[it.date];
+        store.putHabit(Object.assign({}, hh, { checks: ch })); n++; return;
+      }
       if (it.kind === 'event') {
         store.putEvent(it.obj); created.push(it.obj.id);
         var d = it.obj.date || it.obj.from;
@@ -1660,6 +1879,56 @@
       if (p) { pendingLink = p; render(); }
     });
 
+    // 매일 체크
+    $('#hbTabToday').onclick = function () { S.habitTab = 'today'; renderHabits(); };
+    $('#hbTabWeek').onclick = function () { S.habitTab = 'week'; renderHabits(); };
+    $('#hbAdd').onclick = function () { openHabitEditor(null); };
+    $('#hbBody').addEventListener('click', function (e) {
+      var ed = e.target.closest('[data-edit-habit]');
+      if (ed) { openHabitEditor(ed.dataset.editHabit); return; }
+      var b = e.target.closest('[data-habit]');
+      if (b) toggleHabit(b.dataset.habit, b.dataset.date);
+    });
+    $('#hModes').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-mode]'); if (!b) return;
+      HE.mode = b.dataset.mode;
+      if (HE.mode === 'daily') HE.days = [0, 1, 2, 3, 4, 5, 6];
+      else if (HE.mode === 'weekday') HE.days = [1, 2, 3, 4, 5];
+      renderHabitEditor();
+    });
+    $('#hDays').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-day]'); if (!b) return;
+      var d = Number(b.dataset.day), i = HE.days.indexOf(d);
+      if (i >= 0) HE.days.splice(i, 1); else HE.days.push(d);
+      HE.mode = daysMode(HE.days) === 'daily' || daysMode(HE.days) === 'weekday' ? daysMode(HE.days) : 'pick';
+      renderHabitEditor();
+    });
+    $('#hColors').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-color]'); if (!b) return;
+      HE.color = b.dataset.color; renderHabitEditor();
+    });
+    $('#habitForm').addEventListener('submit', function (e) { e.preventDefault(); saveHabit(); });
+    $('#hArchive').onclick = function () {
+      var h = S.habits.get(HE.id); if (!h) return;
+      store.putHabit(Object.assign({}, h, { archived: true }));
+      $('#habitDialog').close();
+      toast('습관을 보관했어요', { label: '되돌리기', fn: function () { store.putHabit(Object.assign({}, h, { archived: false })); } });
+    };
+    $('#hDelete').onclick = function () {
+      var h = S.habits.get(HE.id); if (!h) return;
+      $('#habitDialog').close();
+      choose({ title: '습관 삭제', text: '"' + h.name + '"과(와) 지금까지의 체크 기록을 모두 지울까요? 기록을 남기려면 삭제 대신 보관하세요.', a: '보관하기', b: '삭제', danger: true }, function (r) {
+        if (r === 'a') { store.putHabit(Object.assign({}, h, { archived: true })); toast('습관을 보관했어요'); }
+        else if (r === 'b') { var prev = clone(h); store.delHabit(h.id); toast('습관을 지웠어요', { label: '되돌리기', fn: function () { store.putHabit(prev); } }); }
+      });
+    };
+    $('#archivedHabits').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-restore]'); if (!b) return;
+      var h = S.habits.get(b.dataset.restore); if (!h) return;
+      store.putHabit(Object.assign({}, h, { archived: false }));
+      renderArchived(); toast('습관을 다시 꺼냈어요');
+    });
+
     // 현재 시각 선 갱신
     setInterval(function () { if (S.ready && !document.hidden && !drag && S.view === 'week') renderGrid(); }, 60000);
   }
@@ -1706,6 +1975,15 @@
       { text: '회로설계 예비보고서 양식 받기', state: 'todo' },
       { text: '결과보고서 자료 수집', state: 'done' }
     ].map(function (t, i) { return Object.assign({ id: newId(), scope: 'week', period: wk, created: Date.now() + i }, t); });
+    var hc = {}, tk0 = todayKey();
+    for (var j = 1; j <= 6; j++) hc[keyOf(addDays(new Date(), -j))] = true;
+    raw.habits = [
+      { id: newId(), name: '운동', color: '#d0603a', days: [1, 3, 5], from: keyOf(addDays(w, -28)), archived: false, checks: Object.assign({}, hc), order: 1, created: 1 },
+      { id: newId(), name: '영어 단어', color: '#7a5cc0', days: [0, 1, 2, 3, 4, 5, 6], from: keyOf(addDays(w, -28)), archived: false, checks: {}, order: 2, created: 2 },
+      { id: newId(), name: '성경 읽기', color: '#2f7a55', days: [0, 1, 2, 3, 4, 5, 6], from: keyOf(addDays(w, -28)), archived: false, checks: Object.assign({}, hc), order: 3, created: 3 },
+      { id: newId(), name: '일기 쓰기', color: '#c08a2e', days: [0, 1, 2, 3, 4, 5, 6], from: keyOf(addDays(w, -28)), archived: false, checks: {}, order: 4, created: 4 }
+    ];
+    raw.habits[2].checks[tk0] = true;
     raw.settings = defaultSettings();
     raw.settings.goals[wk] = '보고서 2개 완성 + 자동제어 9주차 수강';
   }
