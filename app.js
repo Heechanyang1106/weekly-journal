@@ -703,7 +703,7 @@
     $('#kindEvent').setAttribute('aria-checked', !dl);
     $('#kindDeadline').setAttribute('aria-checked', dl);
     $('#fTitleLabel').textContent = dl ? '마감 이름' : '일정';
-    $('#fTitle').placeholder = dl ? '예: 자동제어 과제 제출' : '예: 드럼 레슨';
+    $('#fTitle').placeholder = dl ? '예: 과제 제출' : '예: 동아리 모임';
     $('#fStartLabel').textContent = dl ? '마감 시각' : '시작';
     $('#endField').hidden = dl;
     $('#timeRow').classList.toggle('one', dl);
@@ -1323,7 +1323,7 @@
    * 추가:  t 제목, d 날짜(YYYY-MM-DD), s 시작, e 끝, p 장소, m 메모, c 카테고리, u 시간 미정, o 끝 미정,
    *        w 매주 반복 요일 [0=일 … 6=토], f 반복 시작일, l 반복 종료일, dl:true 마감(s = 마감 시각, 기본 23:59)
    *        할 일: {"todo":"내용"} (+ d 그 주 목록, month:true 그 달 목록)
-   * 수정:  {"op":"edit","find":"자동제어","set":{"m":"동영상강의"}}  (+ d: 그 날짜에 있는 것만. 반복 일정이면 그날만, all:true면 전체)
+   * 수정:  {"op":"edit","find":"전공 수업","set":{"m":"동영상강의"}}  (+ d: 그 날짜에 있는 것만. 반복 일정이면 그날만, all:true면 전체)
    * 삭제:  {"op":"del","find":"링크 테스트","d":"2026-10-30"}       (반복 일정 + d 이면 그날만, all:true면 전체)
    */
   function readLinkPayload() {
@@ -1986,47 +1986,47 @@
       if (k(day) < past) e.done[k(day)] = true;
       return e;
     }
+    // 미리보기용 예시 (실제 개인 일정이 아닌 가상의 예시)
     raw.events = [
-      ev(0, '교회', '08:00', '16:00', 'cls', '동성교회', true),
-      ev(1, '자동제어', '13:00', '15:00', 'cls', '학교 207관 234호', true),
-      ev(1, '아날로그및디지털설계실습', '17:00', '19:00', 'cls', '학교', true),
-      ev(2, '통신공학', '11:00', '13:00', 'cls', '학교 310관 727호', true),
-      ev(2, '장한평 · 친구', '22:00', '00:00', 'cls', '장한평'),
-      ev(3, '에너지변환공학', '11:00', '13:00', 'cls', '학교 310관 619호', true),
-      ev(3, '결과보고서', '16:00', '17:30', 'study'),
-      ev(3, '자동제어 9주차 ①', '18:00', '19:00', 'study'),
-      ev(4, '러시아어', '12:00', '15:00', 'cls', '310관 B210호', true),
-      ev(4, '순모임', '15:00', '17:00', 'cls', '학교', true),
-      ev(4, '드럼 레슨', '18:00', '19:00', 'cls', '마노아스튜디오', true),
-      ev(5, '병원 진료', '11:40', '12:10', 'cls', '건대하늘정신건강의학과'),
-      ev(5, 'memoir 회의', '16:00', '20:00', 'cls', '작업실'),
-      ev(6, '결과보고서 완성', '10:00', '11:30', 'study'),
-      ev(6, '예비보고서', '13:00', '14:30', 'study'),
-      ev(6, '자동제어 9주차 ②', '15:00', '16:00', 'study')
+      ev(0, '주말 모임', '10:00', '12:00', 'cls', '', true),
+      ev(1, '전공 수업 A', '13:00', '15:00', 'cls', '강의동 101호', true),
+      ev(1, '실습', '17:00', '19:00', 'cls', '실습실', true),
+      ev(2, '교양 수업', '11:00', '13:00', 'cls', '강의동 202호', true),
+      ev(2, '친구 약속', '19:00', '21:00', 'cls', '카페'),
+      ev(3, '전공 수업 B', '11:00', '13:00', 'cls', '강의동 303호', true),
+      ev(3, '보고서 작성', '16:00', '17:30', 'study'),
+      ev(3, '온라인 강의 ①', '18:00', '19:00', 'study'),
+      ev(4, '외국어 수업', '12:00', '15:00', 'cls', '어학관', true),
+      ev(4, '동아리', '15:00', '17:00', 'cls', '학생회관', true),
+      ev(4, '운동', '18:00', '19:00', 'cls', '체육관', true),
+      ev(5, '은행 업무', '11:40', '12:10', 'cls', ''),
+      ev(5, '팀 회의', '16:00', '20:00', 'cls', '스터디룸'),
+      ev(6, '보고서 마무리', '10:00', '11:30', 'study'),
+      ev(6, '예습', '13:00', '14:30', 'study'),
+      ev(6, '온라인 강의 ②', '15:00', '16:00', 'study')
     ];
-    var d1 = ev(6, '결과보고서 제출', '23:59', null, 'study'); d1.kind = 'deadline';
-    var d2 = ev(1, '자동제어 영상 수강', '23:59', null, 'study', '', true); d2.kind = 'deadline'; d2.done = {};
+    var d1 = ev(6, '보고서 제출', '23:59', null, 'study'); d1.kind = 'deadline';
+    var d2 = ev(1, '온라인 강의 수강', '23:59', null, 'study', '', true); d2.kind = 'deadline'; d2.done = {};
     raw.events.push(d1, d2);
-    raw.events.push({ id: newId(), kind: 'event', title: '충전기 반납 (12–18시)', repeat: 'once', date: k(5), untimed: true, openEnd: false, start: null, end: null, cat: 'tbd', place: '', memo: '', done: {}, skip: {}, created: Date.now() });
+    raw.events.push({ id: newId(), kind: 'event', title: '택배 찾기', repeat: 'once', date: k(5), untimed: true, openEnd: false, start: null, end: null, cat: 'tbd', place: '', memo: '', done: {}, skip: {}, created: Date.now() });
     var wk = keyOf(w);
     raw.tasks = [
-      { text: '충전기 반납 장소 확인', state: 'todo' },
-      { text: '드럼 연습실 예약', state: 'todo' },
-      { text: '방세 이체', state: 'todo' },
-      { text: '회로설계 예비보고서 양식 받기', state: 'todo' },
-      { text: '결과보고서 자료 수집', state: 'done' }
+      { text: '도서관 책 반납', state: 'todo' },
+      { text: '장보기', state: 'todo' },
+      { text: '이메일 답장', state: 'todo' },
+      { text: '발표 자료 출력', state: 'todo' },
+      { text: '자료 조사', state: 'done' }
     ].map(function (t, i) { return Object.assign({ id: newId(), scope: 'week', period: wk, created: Date.now() + i }, t); });
     var hc = {}, tk0 = todayKey();
     for (var j = 1; j <= 6; j++) hc[keyOf(addDays(new Date(), -j))] = true;
     raw.habits = [
       { id: newId(), name: '운동', color: '#d0603a', days: [1, 3, 5], from: keyOf(addDays(w, -28)), archived: false, checks: Object.assign({}, hc), order: 1, created: 1 },
       { id: newId(), name: '영어 단어', color: '#7a5cc0', days: [0, 1, 2, 3, 4, 5, 6], from: keyOf(addDays(w, -28)), archived: false, checks: {}, order: 2, created: 2 },
-      { id: newId(), name: '성경 읽기', color: '#2f7a55', days: [0, 1, 2, 3, 4, 5, 6], from: keyOf(addDays(w, -28)), archived: false, checks: Object.assign({}, hc), order: 3, created: 3 },
+      { id: newId(), name: '독서', color: '#2f7a55', days: [0, 1, 2, 3, 4, 5, 6], from: keyOf(addDays(w, -28)), archived: false, checks: Object.assign({}, hc), order: 3, created: 3 },
       { id: newId(), name: '일기 쓰기', color: '#c08a2e', days: [0, 1, 2, 3, 4, 5, 6], from: keyOf(addDays(w, -28)), archived: false, checks: {}, order: 4, created: 4 }
     ];
     raw.habits[2].checks[tk0] = true;
     raw.settings = defaultSettings();
-    raw.settings.goals[wk] = '보고서 2개 완성 + 자동제어 9주차 수강';
   }
 
   /* ---------------- 시작 ---------------- */
