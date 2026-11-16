@@ -344,7 +344,6 @@
     var tw = keyOf(startOfWeek(new Date())) === weekKey();
     var now = new Date();
     if (month) {
-      $('#pageTitle').textContent = '한눈에 보는 한 달';
       $('#rangeLabel').textContent = S.month.getFullYear() + '년 ' + (S.month.getMonth() + 1) + '월';
       var tm = S.month.getFullYear() === now.getFullYear() && S.month.getMonth() === now.getMonth();
       $('#todayBtn').textContent = tm ? '이번 달' : '이번 달로';
@@ -354,16 +353,12 @@
       var end = addDays(S.week, 6);
       var jan1 = new Date(S.week.getFullYear(), 0, 1);
       var wn = Math.round((S.week - startOfWeek(jan1)) / (7 * 864e5)) + 1;
-      $('#pageTitle').textContent = tw ? '시간으로 보는 이번 주' : '시간으로 보는 한 주';
       $('#rangeLabel').textContent = S.week.getFullYear() + '.' + pad(S.week.getMonth() + 1) + '.' + pad(S.week.getDate()) +
         ' — ' + pad(end.getMonth() + 1) + '.' + pad(end.getDate()) + ' · ' + wn + '주차';
       $('#todayBtn').textContent = tw ? '이번 주' : '이번 주로';
       $('#prevBtn').setAttribute('aria-label', '지난 주');
       $('#nextBtn').setAttribute('aria-label', '다음 주');
-      var goal = $('#goalInput');
-      if (document.activeElement !== goal) goal.value = weekVal(S.settings.goals) || '';
     }
-    $('#goalRow').hidden = month;
     $('#viewWeek').setAttribute('aria-checked', !month);
     $('#viewMonth').setAttribute('aria-checked', month);
     $('#legend').innerHTML = cats().map(function (c) {
@@ -569,9 +564,15 @@
       .filter(function (t) { return t.scope === S.tab && (t.period === period || (S.tab === 'week' && t.period === legacyWeekKey())); })
       .sort(function (a, b) { return (a.created || 0) - (b.created || 0); });
     var SIG = { todo: '•', done: '×', moved: '&gt;', later: '&lt;' };
+    if (S.loaded) list.forEach(function (t) {
+      var lev = legacyLink(t);
+      if (lev) setTimeout(function () { var cur = S.tasks.get(t.id); if (cur && !cur.eventId) store.putTask(Object.assign({}, cur, { eventId: lev.id })); }, 0);
+    });
     var html = list.map(function (t) {
-      var st = t.state || 'todo';
-      var sub = t.note ? '<span class="task-sub">' + esc(t.note) + '</span>' : '';
+      var v = taskView(t), st = v.state;
+      var sub = v.note ? (v.ev
+        ? '<button type="button" class="task-sub task-link" data-act="goto" title="시간표에서 보기">' + esc(v.note) + '</button>'
+        : '<span class="task-sub' + (v.orphan ? ' is-orphan' : '') + '">' + esc(v.note) + '</span>') : '';
       var acts = '';
       if (st === 'todo') {
         var nl = S.tab === 'week' ? '다음 주로' : '다음 달로';
@@ -581,10 +582,44 @@
       acts += '<button type="button" data-act="del" aria-label="삭제" title="삭제">' + ICON.x + '</button>';
       return '<li class="task s-' + st + '" data-id="' + esc(t.id) + '"' + (st === 'todo' ? ' draggable="true"' : '') + '>' +
         '<button type="button" class="sig" data-act="cycle" aria-label="' + (st === 'done' ? '완료 취소' : '완료 표시') + '">' + SIG[st] + '</button>' +
-        '<div class="task-main"><span class="task-text" data-act="edit">' + esc(t.text) + '</span>' + sub + '</div>' +
+        '<div class="task-main"><span class="task-text" data-act="edit">' + esc(v.text) + '</span>' + sub + '</div>' +
         '<div class="task-acts">' + acts + '</div></li>';
     }).join('');
     $('#taskList').innerHTML = html || '<li class="empty">아직 적어둔 할 일이 없어요.</li>';
+  }
+
+  // 할 일 ↔ 시간표 일정 연결: 일정으로 옮긴 할 일은 그 일정의 지금 이름·날짜·시간·완료 상태를 그대로 보여줘요
+  function taskView(t) {
+    var st = t.state || 'todo';
+    var ev = st === 'moved' && t.eventId ? (S.events.get(t.eventId) || null) : null;
+    if (st === 'moved' && t.eventId && !ev && S.loaded) {
+      return { state: 'todo', text: t.text, note: '연결된 일정이 지워져서 다시 할 일로 돌아왔어요', ev: null, orphan: true };
+    }
+    if (!ev) return { state: st, text: t.text, note: t.note || '', ev: null };
+    var dl = isDeadline(ev), when, done = false;
+    if (ev.repeat === 'weekly') {
+      when = '매주 ' + dayLabels(ev.days || []) + (ev.start && !ev.untimed ? ' ' + ev.start : '');
+    } else {
+      when = mdDow(ev.date) + (ev.untimed || !ev.start ? ' 시간 미정' : ' ' + ev.start);
+      done = !!(ev.done && ev.done[ev.date]);
+    }
+    return { state: done ? 'done' : 'moved', text: ev.title, note: when + (dl ? ' 마감' : ' 일정') + (done ? ' · 완료' : ''), ev: ev };
+  }
+  // 예전 버전에서 옮긴 할 일은 연결 정보가 없어서, 이름과 날짜로 일정을 찾아 한 번 연결해요
+  var legacyTried = {};
+  function legacyLink(t) {
+    if (t.eventId || t.state !== 'moved' || legacyTried[t.id]) return null;
+    legacyTried[t.id] = true;
+    var n = normTitle(t.text);
+    var cands = Array.from(S.events.values()).filter(function (ev) { return normTitle(ev.title) === n; });
+    var m = (t.note || '').match(/^(\d{1,2})\/(\d{1,2})/);
+    if (m && cands.length > 1) {
+      var mm = Number(m[1]), dd = Number(m[2]);
+      cands = cands.filter(function (ev) { if (!ev.date) return false; var d = parseKey(ev.date); return d.getMonth() + 1 === mm && d.getDate() === dd; });
+    } else if (/^매주/.test(t.note || '') && cands.length > 1) {
+      cands = cands.filter(function (ev) { return ev.repeat === 'weekly'; });
+    }
+    return cands.length === 1 ? cands[0] : null;
   }
 
   // 다가오는 마감 (지난 7일 중 못 끝낸 것 ~ 앞으로 30일)
@@ -763,7 +798,7 @@
       var t = S.tasks.get(E.taskId);
       if (t) {
         store.putTask(Object.assign({}, t, {
-          state: 'moved',
+          state: 'moved', eventId: ev.id,
           note: (E.mode === 'weekly' ? '매주 일정으로 옮김' : mdDow(firstDate) + (ev.start ? ' ' + ev.start : '') + (dl ? ' 마감으로 옮김' : ' 일정으로 옮김'))
         }));
       }
@@ -986,7 +1021,7 @@
     S.editingTask = t.id;
     var span = li.querySelector('.task-text');
     var input = document.createElement('input');
-    input.className = 'task-edit'; input.value = t.text; input.maxLength = 200;
+    input.className = 'task-edit'; input.value = taskView(t).text; input.maxLength = 200;
     input.setAttribute('aria-label', '할 일 고치기');
     span.replaceWith(input);
     input.focus(); input.select();
@@ -995,7 +1030,11 @@
       if (finished) return; finished = true;
       S.editingTask = null;
       var v = input.value.trim();
-      if (save && v && v !== t.text) store.putTask(Object.assign({}, t, { text: v }));
+      var lev = taskView(t).ev;
+      if (save && v && lev && v !== lev.title) {
+        store.putEvent(Object.assign({}, lev, { title: v.slice(0, 100), updated: Date.now() }));
+        store.putTask(Object.assign({}, t, { text: v }));
+      } else if (save && v && !lev && v !== t.text) store.putTask(Object.assign({}, t, { text: v }));
       else renderSide();
     }
     input.addEventListener('keydown', function (e) {
@@ -1642,10 +1681,6 @@
     $('#modeBadge').onclick = openSettings;
     $('#wrapBtn').onclick = openWrap;
 
-    var saveGoal = debounce(function (wk, v) {
-      var g = Object.assign({}, S.settings.goals || {}); g[wk] = v; store.putSettings({ goals: g });
-    }, 600);
-    $('#goalInput').addEventListener('input', function (e) { saveGoal(weekKey(), e.target.value); });
     var saveMemo = debounce(function (wk, v) {
       var m = Object.assign({}, S.settings.memos || {}); m[wk] = v; store.putSettings({ memos: m });
     }, 700);
@@ -1756,11 +1791,17 @@
       var btn = e.target.closest('[data-act]'); if (!btn) return;
       var li = btn.closest('.task'), t = li && S.tasks.get(li.dataset.id); if (!t) return;
       var act = btn.dataset.act;
+      var v = taskView(t);
       if (act === 'cycle') {
-        var st = t.state || 'todo';
-        if (st === 'todo') store.putTask(Object.assign({}, t, { state: 'done' }));
+        // 시간표 일정과 연결된 할 일은 체크하면 일정도 같이 완료돼요
+        if (v.ev && v.ev.repeat !== 'weekly') { toggleDone(v.ev.id, v.ev.date); return; }
+        var st = v.orphan ? 'todo' : (t.state || 'todo');
+        if (st === 'todo') store.putTask(Object.assign({}, t, { state: 'done', eventId: null, note: '' }));
         else if (st === 'done') store.putTask(Object.assign({}, t, { state: 'todo' }));
-        else store.putTask(Object.assign({}, t, { state: 'todo', note: '' }));
+        else store.putTask(Object.assign({}, t, { state: 'todo', note: '', eventId: null }));
+      } else if (act === 'goto' && v.ev) {
+        S.week = startOfWeek(parseKey(v.ev.date || v.ev.from || todayKey()));
+        if (S.view !== 'week') setView('week'); else render();
       } else if (act === 'edit') startTaskEdit(li, t);
       else if (act === 'schedule') openEditor({ title: t.text, taskId: t.id });
       else if (act === 'later') postpone(t);
