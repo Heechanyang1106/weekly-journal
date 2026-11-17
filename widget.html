@@ -32,9 +32,15 @@
 html, body { height: 100%; margin: 0; overflow: hidden; }
 body {
   font-family: 'IBM Plex Sans KR', system-ui, 'Malgun Gothic', sans-serif; color: var(--ink); font-size: 14px;
-  background: linear-gradient(180deg, #7fa9d3 0%, #a9c6e2 26%, #d7e2ea 44%, #e9d6bf 50%, #6f9fc4 51%, #4f86b0 60%, #d9bf9c 61%, #c8a47c 78%, #9d7a55 100%);
-  background-size: cover; background-position: center;
+  background-color: #141a2b; background-image: var(--bg); background-size: cover; background-repeat: no-repeat;
 }
+/* 기본 배경 (사진을 고르지 않았을 때) */
+[data-bg="night"] { --bg: radial-gradient(ellipse 70% 60% at 80% 10%, rgba(120, 110, 220, .45), transparent 60%), radial-gradient(ellipse 60% 70% at 10% 90%, rgba(40, 140, 170, .35), transparent 65%), linear-gradient(160deg, #1b2140 0%, #121a30 55%, #0d1322 100%); }
+[data-bg="dawn"] { --bg: radial-gradient(ellipse 80% 55% at 75% 100%, rgba(255, 170, 140, .55), transparent 65%), radial-gradient(ellipse 60% 60% at 15% 0%, rgba(130, 120, 220, .5), transparent 60%), linear-gradient(170deg, #3a3a6e 0%, #6b5a8e 50%, #b07a8a 100%); }
+[data-bg="forest"] { --bg: radial-gradient(ellipse 70% 60% at 85% 15%, rgba(150, 200, 140, .3), transparent 60%), radial-gradient(ellipse 60% 70% at 0% 100%, rgba(30, 110, 100, .45), transparent 65%), linear-gradient(160deg, #1d3a34 0%, #16302b 50%, #0f221f 100%); }
+[data-bg="sunset"] { --bg: radial-gradient(ellipse 90% 60% at 50% 105%, rgba(255, 150, 90, .6), transparent 65%), radial-gradient(ellipse 50% 50% at 90% 10%, rgba(200, 90, 150, .45), transparent 60%), linear-gradient(175deg, #2b2050 0%, #5a2f5e 55%, #a2525a 100%); }
+[data-bg="ocean"] { --bg: radial-gradient(ellipse 70% 60% at 20% 15%, rgba(110, 190, 230, .4), transparent 60%), radial-gradient(ellipse 70% 60% at 90% 95%, rgba(60, 90, 200, .45), transparent 65%), linear-gradient(165deg, #173a5a 0%, #12304c 50%, #0b1f33 100%); }
+[data-bg="ink"] { --bg: radial-gradient(ellipse 60% 50% at 70% 20%, rgba(255, 255, 255, .07), transparent 60%), linear-gradient(160deg, #2a2d33 0%, #1d1f24 60%, #15161a 100%); }
 body.has-photo { background: #000 var(--photo) center / cover no-repeat; }
 button, input { font: inherit; color: inherit; }
 button { cursor: pointer; }
@@ -47,21 +53,24 @@ button { cursor: pointer; }
 .bar-title b { font-size: 22px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; }
 .bar-title span { font-size: 14px; color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .bar-right { display: flex; align-items: center; gap: 8px; }
+.bar-right > .pills:last-of-type { margin-right: 6px; }
 .pills { display: flex; background: var(--chip); border-radius: 999px; padding: 3px; }
 .pills button { height: 30px; padding: 0 13px; border: 0; border-radius: 999px; background: transparent; font-size: 13px; }
 .pills button[aria-checked="true"] { background: rgba(255, 255, 255, .92); color: #1d2a3a; font-weight: 700; }
-.nav { display: flex; align-items: center; background: var(--chip); border-radius: 999px; }
+.nav { display: flex; align-items: center; background: var(--chip); border-radius: 999px; width: 150px; }
+.nav #today { flex: 1; }
 .nav button { height: 36px; min-width: 36px; padding: 0 8px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; border-radius: 999px; }
 .round { width: 36px; height: 36px; border: 0; border-radius: 999px; background: var(--chip); display: flex; align-items: center; justify-content: center; color: var(--ink); text-decoration: none; }
 .nav button:hover, .round:hover, .pills button:hover { background-color: rgba(255, 255, 255, .22); }
 .pills button[aria-checked="true"]:hover { background: #ffffff; }
 
-.main { flex: 1; min-height: 0; display: flex; gap: 14px; }
+.main { flex: 1; min-height: 0; display: flex; gap: 8px; }
 .board { flex: 1; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
-.side { width: 300px; flex: none; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
-.card { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.card h2 { margin: 0; font-size: 16px; font-weight: 700; }
-.card .sub { font-size: 12px; color: var(--faint); font-weight: 400; margin-left: 6px; }
+/* 오른쪽 칸 너비 = 위쪽 ‹ 이번 주 › 부터 끝까지 (12 + 36 + 8 + 36 + 8 + 150 + 테두리 1) */
+.side { width: 251px; flex: none; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.card { padding: 13px 14px; display: flex; flex-direction: column; gap: 9px; }
+.card h2 { margin: 0; font-size: 14px; font-weight: 700; white-space: nowrap; }
+.card .sub { font-size: 11.5px; color: var(--faint); font-weight: 400; margin-left: 6px; }
 
 /* 주간 */
 .wk-head, .wk-body { display: grid; grid-template-columns: 48px repeat(7, minmax(0, 1fr)); }
@@ -111,24 +120,27 @@ button { cursor: pointer; }
 .more { font-size: 10.5px; color: var(--faint); margin-top: auto; }
 
 /* 사이드 */
-.hb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-.hb { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, .1); min-width: 0; }
-.hb.done { background: var(--hsoft); }
-.hb .box { flex: none; width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid var(--h); display: flex; align-items: center; justify-content: center; }
-.hb.done .box { background: var(--h); border-color: var(--h); }
-.hb .txt { display: flex; flex-direction: column; min-width: 0; }
-.hb .nm { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hb.done .nm { opacity: .8; }
-.hb .st { font-size: 10.5px; color: var(--faint); }
-.hb .st.fire { color: #ffd0b0; font-weight: 600; }
-.dl-row { display: flex; align-items: center; gap: 10px; }
-.dl-row .dd { min-width: 46px; font-size: 13px; font-weight: 700; color: var(--sat); font-variant-numeric: tabular-nums; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.hb-list { display: flex; flex-direction: column; gap: 5px; }
+.hb { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
+.hb .dot { flex: none; width: 9px; height: 9px; border-radius: 999px; border: 1.8px solid var(--h); }
+.hb.done .dot { background: var(--h); }
+.hb .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hb.done .nm { color: var(--faint); text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, .45); }
+.dl-row { display: flex; align-items: center; gap: 8px; }
+.dl-row .dd { min-width: 36px; font-size: 12px; font-weight: 700; color: var(--sat); font-variant-numeric: tabular-nums; }
 .dl-row .dd.soon { color: var(--sun); }
 .dl-row .tx { display: flex; flex-direction: column; min-width: 0; }
-.dl-row .tx b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dl-row .tx span { font-size: 11.5px; color: var(--faint); }
+.dl-row .tx b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl-row .tx span { font-size: 11px; color: var(--faint); }
 .empty { font-size: 12.5px; color: var(--faint); margin: 0; }
-.stamp { margin-top: auto; font-size: 11px; color: rgba(255, 255, 255, .8); text-shadow: 0 1px 2px rgba(0, 0, 0, .4); text-align: right; }
+.swatches { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.swatches button { aspect-ratio: 1; border-radius: 999px; border: 2px solid rgba(255, 255, 255, .25); background-image: var(--bg); background-size: cover; padding: 0; }
+.swatches button[aria-checked="true"] { border-color: #ffffff; box-shadow: 0 0 0 2px rgba(255, 255, 255, .35); }
+.sync-info { font-size: 11.5px; color: var(--faint); margin: -4px 0 0; line-height: 1.6; font-variant-numeric: tabular-nums; }
+.btn.busy svg { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .btn.busy svg { animation: none; } }
 
 /* 설정 */
 .panel { position: absolute; top: 86px; right: 24px; width: 300px; max-height: calc(100% - 86px - var(--padB)); overflow-y: auto; z-index: 20; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; background: rgba(18, 28, 46, .86); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); border: 1px solid rgba(255, 255, 255, .3); border-radius: 14px; }
@@ -149,7 +161,7 @@ button { cursor: pointer; }
 :focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; }
 </style>
 </head>
-<body>
+<body data-bg="night">
 <div class="wrap" id="wrap" hidden>
   <header class="bar glass">
     <div class="bar-title"><b id="title"></b><span id="range"></span></div>
@@ -174,9 +186,8 @@ button { cursor: pointer; }
   <div class="main">
     <section class="board glass" id="board" aria-label="시간표"></section>
     <aside class="side">
-      <section class="card glass" aria-labelledby="hbH"><h2 id="hbH">오늘 매일 체크<span class="sub" id="hbDate"></span></h2><div id="habits"></div></section>
-      <section class="card glass" aria-labelledby="dlH"><h2 id="dlH">다가오는 마감</h2><div id="dls" style="display:flex;flex-direction:column;gap:10px"></div></section>
-      <p class="stamp" id="stamp"></p>
+      <section class="card glass" aria-labelledby="hbH"><h2 id="hbH">매일 체크<span class="sub" id="hbDate"></span></h2><div id="habits"></div></section>
+      <section class="card glass" aria-labelledby="dlH"><h2 id="dlH">다가오는 마감</h2><div id="dls" style="display:flex;flex-direction:column;gap:8px"></div></section>
     </aside>
   </div>
 </div>
@@ -188,14 +199,26 @@ button { cursor: pointer; }
   <label for="sPadL"><span><span>왼쪽 여백 (바탕화면 아이콘 자리)</span><b id="sPadLV"></b></span><input id="sPadL" type="range" min="0" max="500" step="4"></label>
   <label for="sPadB"><span><span>아래 여백 (작업 표시줄)</span><b id="sPadBV"></b></span><input id="sPadB" type="range" min="0" max="160" step="2"></label>
   <label for="sScale"><span><span>전체 크기</span><b id="sScaleV"></b></span><input id="sScale" type="range" min="70" max="160" step="5"></label>
-  <div class="row">
-    <span class="btn">배경 사진 고르기<input type="file" id="sPhoto" accept="image/*" aria-label="배경 사진 고르기"></span>
-    <button type="button" class="btn" id="sPhotoReset">기본 배경</button>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <span style="font-size:12.5px">배경</span>
+    <div class="swatches" id="sBg" role="radiogroup" aria-label="기본 배경">
+      <button type="button" role="radio" data-bg="night" aria-label="밤하늘" title="밤하늘"></button>
+      <button type="button" role="radio" data-bg="dawn" aria-label="새벽" title="새벽"></button>
+      <button type="button" role="radio" data-bg="forest" aria-label="숲" title="숲"></button>
+      <button type="button" role="radio" data-bg="sunset" aria-label="노을" title="노을"></button>
+      <button type="button" role="radio" data-bg="ocean" aria-label="깊은 바다" title="깊은 바다"></button>
+      <button type="button" role="radio" data-bg="ink" aria-label="먹색" title="먹색"></button>
+    </div>
+    <span class="btn" style="flex:none">내 사진으로 바꾸기<input type="file" id="sPhoto" accept="image/*" aria-label="내 사진으로 바꾸기"></span>
   </div>
   <div class="row">
     <button type="button" class="btn" id="sStart"></button>
   </div>
-  <p class="hint">설정은 이 바탕화면에만 저장돼요. 일정은 사이트에서 고치면 몇 초 안에 여기에도 반영돼요.</p>
+  <div class="row">
+    <button type="button" class="btn" id="sSync" style="gap:6px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v2.8h-2.8"/></svg>지금 새로고침</button>
+  </div>
+  <p class="sync-info" id="syncInfo"></p>
+  <p class="hint">설정은 이 바탕화면에만 저장돼요. 일정은 사이트에서 고치면 보통 몇 초 안에 저절로 반영되고, 안 바뀌어 보이면 새로고침을 눌러 주세요.</p>
 </section>
 
 <div class="msg" id="msg" hidden><div class="glass"><h1 id="msgH"></h1><p id="msgP"></p></div></div>

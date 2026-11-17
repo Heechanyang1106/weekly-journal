@@ -34,12 +34,14 @@
   function holidayOf(k) { return (window.WJ_HOLIDAYS || {})[k] || ''; }
   function termOf(k) { return (window.WJ_TERMS || {})[k] || ''; }
   var FLAG = '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><path d="M3.5 15V2M3.5 2.5h8.5l-2 3 2 3H3.5"/></svg>';
-  var CHECK = '<svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2.5 6.3 2.4 2.4 4.6-5"/></svg>';
 
   /* ---------- 이 바탕화면만의 설정 (브라우저 저장소) ---------- */
   function load(k, d) { try { var v = localStorage.getItem('wjw-' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
   function save(k, v) { try { localStorage.setItem('wjw-' + k, JSON.stringify(v)); } catch (e) {} }
-  var P = { alpha: load('alpha', 45), blur: load('blur', 14), scale: load('scale', 100), start: load('start', 'week'), monthAll: load('monthAll', false), padL: load('padL', 24), padB: load('padB', 60) };
+  var P = { alpha: load('alpha', 45), blur: load('blur', 14), scale: load('scale', 100), start: load('start', 'week'), monthAll: load('monthAll', false), padL: load('padL', 24), padB: load('padB', 60), bg: load('bg', 'night') };
+  var BGS = ['night', 'dawn', 'forest', 'sunset', 'ocean', 'ink'];
+  if (BGS.indexOf(P.bg) < 0) P.bg = 'night';
+  var SYNC = { checked: null, refresh: null };
 
   var S = { view: P.start, week: startOfWeek(new Date()), month: new Date(new Date().getFullYear(), new Date().getMonth(), 1), data: null };
 
@@ -98,8 +100,7 @@
     $('#moFilter').querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-checked', (b.dataset.mf === 'all') === !!P.monthAll); });
     if (month) renderMonth(); else renderWeek();
     renderSide();
-    var u = S.data.updated ? new Date(S.data.updated) : null;
-    $('#stamp').textContent = u ? pad(u.getMonth() + 1) + '/' + pad(u.getDate()) + ' ' + pad(u.getHours()) + ':' + pad(u.getMinutes()) + ' 사이트에서 저장한 일정' : '';
+    renderSync();
   }
 
   function renderWeek() {
@@ -202,26 +203,14 @@
     $('#board').innerHTML = html;
   }
 
-  function streakOf(h) {
-    var tk = todayKey(), d = parseKey(tk), n = 0, ch = h.checks || {};
-    var on = function (k) { if (h.from && k < h.from) return false; return (h.days || [0, 1, 2, 3, 4, 5, 6]).indexOf(parseKey(k).getDay()) >= 0; };
-    if (on(tk) && !ch[tk]) d = addDays(d, -1);
-    for (var i = 0; i < 120; i++) {
-      var k = keyOf(d);
-      if (h.from && k < h.from) break;
-      if (on(k)) { if (ch[k]) n++; else break; }
-      d = addDays(d, -1);
-    }
-    return n;
-  }
   function renderSide() {
     var tk = todayKey(), td = parseKey(tk);
     $('#hbDate').textContent = (td.getMonth() + 1) + '/' + td.getDate() + ' ' + DOW[td.getDay()];
     var list = habits().filter(function (h) { return !h.archived && (!h.from || tk >= h.from) && (h.days || [0, 1, 2, 3, 4, 5, 6]).indexOf(td.getDay()) >= 0; });
-    $('#habits').innerHTML = list.length ? '<div class="hb-grid">' + list.map(function (h) {
-      var done = !!(h.checks || {})[tk], st = streakOf(h);
-      return '<div class="hb' + (done ? ' done' : '') + '" style="--h:' + esc(h.color) + ';--hsoft:' + hexA(h.color, .38) + '"><span class="box">' + (done ? CHECK : '') + '</span>' +
-        '<span class="txt"><span class="nm">' + esc(h.name) + '</span>' + (st >= 2 ? '<span class="st fire">' + st + '일 연속</span>' : '<span class="st">' + (done ? '오늘 완료' : '오늘 할 일') + '</span>') + '</span></div>';
+    $('#habits').innerHTML = list.length ? '<div class="hb-list">' + list.map(function (h) {
+      var done = !!(h.checks || {})[tk];
+      return '<div class="hb' + (done ? ' done' : '') + '" style="--h:' + esc(h.color) + '"><span class="dot"></span><span class="nm">' + esc(h.name) + '</span>' +
+        '<span class="sr-only">' + (done ? ' 완료' : ' 할 일') + '</span></div>';
     }).join('') + '</div>' : '<p class="empty">오늘 체크할 습관이 없어요.</p>';
 
     var dls = [], base = parseKey(tk), seen = {};
@@ -240,6 +229,16 @@
     }).join('') : '<p class="empty">다가오는 마감이 없어요.</p>';
   }
 
+  /* ---------- 새로고침 정보 ---------- */
+  function stampOf(t) {
+    if (!t) return '-';
+    var d = new Date(t);
+    return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+  function renderSync() {
+    $('#syncInfo').innerHTML = '마지막 새로고침 ' + stampOf(SYNC.checked) + '<br>사이트에서 마지막 저장 ' + stampOf(S.data && S.data.updated);
+  }
+
   /* ---------- 설정 패널 ---------- */
   function applyLook() {
     var r = document.documentElement.style;
@@ -256,6 +255,10 @@
     $('#sPadL').value = P.padL; $('#sPadLV').textContent = P.padL + 'px';
     $('#sPadB').value = P.padB; $('#sPadBV').textContent = P.padB + 'px';
     $('#sStart').textContent = '처음 보기: ' + (P.start === 'month' ? '한 달' : '이번 주');
+    document.body.dataset.bg = P.bg;
+    $('#sBg').querySelectorAll('[data-bg]').forEach(function (b) {
+      b.setAttribute('aria-checked', !document.body.classList.contains('has-photo') && b.dataset.bg === P.bg);
+    });
   }
   // 배경 사진은 용량이 커서 IndexedDB에 저장
   function photoDb(fn) {
@@ -282,6 +285,7 @@
       document.body.style.setProperty('--photo', 'url("' + photoUrl + '")');
       document.body.classList.add('has-photo');
     } else document.body.classList.remove('has-photo');
+    applyLook();
   }
   function savePhoto(blob) {
     photoDb(function (db) {
@@ -318,7 +322,18 @@
     $('#sPadB').oninput = function (e) { P.padB = Number(e.target.value); save('padB', P.padB); applyLook(); render(); };
     $('#sStart').onclick = function () { P.start = P.start === 'month' ? 'week' : 'month'; save('start', P.start); applyLook(); };
     $('#sPhoto').onchange = function (e) { var f = e.target.files && e.target.files[0]; if (f) savePhoto(f); e.target.value = ''; };
-    $('#sPhotoReset').onclick = function () { savePhoto(null); };
+    $('#sBg').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-bg]'); if (!b) return;
+      P.bg = b.dataset.bg; save('bg', P.bg);
+      if (document.body.classList.contains('has-photo')) savePhoto(null); else applyLook();
+    });
+    $('#sSync').onclick = function () {
+      var btn = $('#sSync');
+      if (btn.classList.contains('busy')) return;
+      if (!SYNC.refresh) { location.reload(); return; }
+      btn.classList.add('busy');
+      SYNC.refresh().then(function () { btn.classList.remove('busy'); }, function () { location.reload(); });
+    };
     var rt;
     window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(render, 150); });
     // 1분마다 현재 시각 선, 자정이 지나면 날짜도 갱신
@@ -346,6 +361,7 @@
   }
   function useData(d) {
     S.data = d;
+    SYNC.checked = Date.now();
     try { localStorage.setItem('wjw-cache', JSON.stringify(d)); } catch (e) {}
     render();
   }
@@ -362,8 +378,11 @@
     var base = 'https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION + '/';
     Promise.all([import(base + 'firebase-app.js'), import(base + 'firebase-firestore.js')]).then(function (m) {
       var app = m[0].initializeApp(cfg, 'widget'), fs = m[1];
-      var db = fs.getFirestore(app);
-      fs.onSnapshot(fs.doc(db, 'widgets', key), function (snap) {
+      var db = fs.getFirestore(app), ref = fs.doc(db, 'widgets', key);
+      SYNC.refresh = function () {
+        return fs.getDocFromServer(ref).then(function (snap) { if (snap.exists()) useData(snap.data()); });
+      };
+      fs.onSnapshot(ref, function (snap) {
         if (!snap.exists()) {
           showMsg('바탕화면 주소가 맞지 않아요', '주소가 바뀌었거나 꺼졌을 수 있어요. 사이트 ⚙ 설정 → 바탕화면 달력에서 주소를 다시 복사해 Lively에 넣어 주세요.');
           return;
