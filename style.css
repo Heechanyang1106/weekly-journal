@@ -345,6 +345,16 @@ body.is-resizing, body.is-resizing * { cursor: ns-resize !important; user-select
 .task-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .task { display: flex; align-items: flex-start; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--line-soft); }
 .task:last-child { border-bottom: 0; }
+.task-gh { display: flex; align-items: center; gap: 6px; padding: 12px 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--line-soft); }
+.task-gh:first-child { padding-top: 2px; }
+.task-gh b, .task-gh-btn b { min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px; background: var(--hover); font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
+.task-gh.g-moved span { color: var(--accent); }
+.task-gh.g-later span { color: var(--later); }
+.task-gh-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; margin: -4px 0; padding: 0 6px 0 0; border: 0; background: none; font: inherit; color: inherit; border-radius: 6px; cursor: pointer; }
+.task-gh-btn:hover { color: var(--ink); }
+.task-gh-btn .chev { transition: transform .15s; }
+.task-gh-btn[aria-expanded="false"] .chev { transform: rotate(-90deg); }
+.task-gh + .task { border-top: 0; }
 .task[draggable="true"] { cursor: grab; }
 .task.dragging { opacity: .4; }
 .sig {

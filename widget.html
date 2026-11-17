@@ -133,6 +133,21 @@ button { cursor: pointer; }
 .dl-row .tx { display: flex; flex-direction: column; min-width: 0; }
 .dl-row .tx b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dl-row .tx span { font-size: 11px; color: var(--faint); }
+.tk-card { min-height: 0; flex: 0 1 auto; overflow: hidden; }
+#tks { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: hidden; }
+#tks.more { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 18px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 18px), transparent); }
+.tk-group h3 { margin: 0 0 5px; font-size: 11.5px; font-weight: 600; color: var(--faint); display: flex; align-items: center; gap: 6px; }
+.tk-group h3 span { font-size: 10.5px; padding: 0 6px; border-radius: 999px; background: var(--chip); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.tk-group ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.tk { display: flex; gap: 7px; font-size: 13px; line-height: 1.35; min-width: 0; }
+.tk .sig { flex: none; width: 10px; text-align: center; font-weight: 700; color: var(--ink-2); }
+.tk.moved .sig { color: var(--sat); font-size: 12px; }
+.tk .tx { min-width: 0; display: flex; flex-direction: column; }
+.tk .tx { overflow: hidden; text-overflow: ellipsis; }
+.tk em { font-style: normal; font-size: 10px; color: var(--faint); border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 4px; margin-left: 5px; vertical-align: 1px; }
+.tk:not(.moved) .tx { display: block; white-space: nowrap; }
+.tk small { font-size: 11px; color: var(--faint); }
+.tk.moved .tx > :first-child, .tk.moved .tx { white-space: nowrap; }
 .empty { font-size: 12.5px; color: var(--faint); margin: 0; }
 .swatches { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
 .swatches button { aspect-ratio: 1; border-radius: 999px; border: 2px solid rgba(255, 255, 255, .25); background-image: var(--bg); background-size: cover; padding: 0; }
@@ -188,6 +203,7 @@ button { cursor: pointer; }
     <aside class="side">
       <section class="card glass" aria-labelledby="hbH"><h2 id="hbH">매일 체크<span class="sub" id="hbDate"></span></h2><div id="habits"></div></section>
       <section class="card glass" aria-labelledby="dlH"><h2 id="dlH">다가오는 마감</h2><div id="dls" style="display:flex;flex-direction:column;gap:8px"></div></section>
+      <section class="card glass tk-card" aria-labelledby="tkH"><h2 id="tkH">할 일 모음</h2><div id="tks"></div></section>
     </aside>
   </div>
 </div>

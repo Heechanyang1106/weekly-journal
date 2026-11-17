@@ -227,6 +227,42 @@
       var dd = d.diff === 0 ? 'D-day' : d.diff > 0 ? 'D-' + d.diff : (-d.diff) + '일 지남';
       return '<div class="dl-row"><span class="dd' + (d.diff <= 2 ? ' soon' : '') + '">' + dd + '</span><span class="tx"><b>' + esc(d.ev.title) + '</b><span>' + mdDow(d.k) + ' ' + esc(d.ev.start || '23:59') + '</span></span></div>';
     }).join('') : '<p class="empty">다가오는 마감이 없어요.</p>';
+    renderTasks();
+  }
+
+  /* ---------- 할 일 모음 (이번 주 + 이번 달, 남은 것과 일정으로 옮긴 것만) ---------- */
+  function tasks() { return (S.data && S.data.tasks) || []; }
+  function evById(id) { var e = events(); for (var i = 0; i < e.length; i++) if (e[i].id === id) return e[i]; return null; }
+  function renderTasks() {
+    var now = new Date(), wk = keyOf(startOfWeek(now)), legacy = keyOf(addDays(startOfWeek(now), -1));
+    var mk = (function () { var t = addDays(startOfWeek(now), 3); return t.getFullYear() + '-' + pad(t.getMonth() + 1); })();
+    var todo = [], moved = [];
+    tasks().filter(function (t) {
+      return t.scope === 'week' ? (t.period === wk || t.period === legacy) : t.period === mk;
+    }).sort(function (a, b) { return (a.scope === b.scope ? 0 : a.scope === 'week' ? -1 : 1) || (a.created || 0) - (b.created || 0); })
+      .forEach(function (t) {
+        var ev = t.state === 'moved' && t.eventId ? evById(t.eventId) : null;
+        if (t.state === 'moved' && ev) {
+          var when, done = false;
+          if (ev.repeat === 'weekly') when = '매주 ' + (ev.days || []).slice().sort(function (a, b) { return ((a + 6) % 7) - ((b + 6) % 7); }).map(function (d) { return DOW[d]; }).join('·') + (ev.start ? ' ' + ev.start : '');
+          else { when = mdDow(ev.date) + (ev.start ? ' ' + ev.start : ''); done = !!(ev.done && ev.done[ev.date]); }
+          if (!done) moved.push({ text: ev.title, sub: when + (isDl(ev) ? ' 마감' : '') });
+        } else if (t.state === 'todo' || (t.state === 'moved' && t.eventId)) {
+          todo.push({ text: t.text, month: t.scope === 'month' });
+        } else if (t.state === 'moved') {
+          moved.push({ text: t.text, sub: '' }); // 예전 버전에서 옮긴 것(연결 정보 없음)
+        }
+      });
+    var html = '';
+    if (todo.length) html += '<div class="tk-group"><h3>할 일<span>' + todo.length + '</span></h3><ul>' + todo.map(function (t) {
+      return '<li class="tk"><span class="sig" aria-hidden="true">•</span><span class="tx">' + esc(t.text) + (t.month ? '<em>이번 달</em>' : '') + '</span></li>';
+    }).join('') + '</ul></div>';
+    if (moved.length) html += '<div class="tk-group"><h3>일정으로 옮김<span>' + moved.length + '</span></h3><ul>' + moved.map(function (t) {
+      return '<li class="tk moved"><span class="sig" aria-hidden="true">&gt;</span><span class="tx">' + esc(t.text) + (t.sub ? '<small>' + esc(t.sub) + '</small>' : '') + '</span></li>';
+    }).join('') + '</ul></div>';
+    $('#tks').innerHTML = html || '<p class="empty">남은 할 일이 없어요.</p>';
+    var el = $('#tks'); el.classList.remove('more');
+    if (el.scrollHeight > el.clientHeight + 1) el.classList.add('more'); // 넘치면 아래를 흐리게
   }
 
   /* ---------- 새로고침 정보 ---------- */
@@ -410,6 +446,13 @@
         wk(4, '외국어 수업', '12:00', '15:00', 'a'), wk(4, '동아리', '15:00', '17:00', 'd'), wk(4, '악기 레슨', '18:00', '19:00', 'e'), wk(0, '주말 모임', '10:00', '13:00', 'd'),
         ev(2, '멘토링', '09:30', '12:30', 'b', { star: true }), ev(1, '프로젝트 작업', '19:00', '21:00', 'b'), ev(4, '저녁 약속', '19:00', '21:00', 'c', { star: true }),
         ev(2, '기획서 초안', '09:30', null, 'b', { kind: 'deadline' }), ev(6, '보고서 제출', '23:59', null, 'a', { kind: 'deadline' })
+      ],
+      tasks: [
+        { id: 't1', text: '도서관 책 반납', state: 'todo', scope: 'week', period: keyOf(w), created: 1 },
+        { id: 't2', text: '발표 자료 정리', state: 'todo', scope: 'week', period: keyOf(w), created: 2 },
+        { id: 't3', text: '기획서 초안', state: 'moved', scope: 'week', period: keyOf(w), eventId: '기획서 초안2', created: 3 },
+        { id: 't4', text: '저녁 약속', state: 'moved', scope: 'week', period: keyOf(w), eventId: '저녁 약속4', created: 4 },
+        { id: 't5', text: '겨울 옷 정리', state: 'todo', scope: 'month', period: (function () { var t = addDays(w, 3); return t.getFullYear() + '-' + pad(t.getMonth() + 1); })(), created: 5 }
       ],
       habits: [
         { id: 'h1', name: '독서', color: '#2f7a55', days: [0, 1, 2, 3, 4, 5, 6], checks: hc },

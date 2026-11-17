@@ -85,6 +85,7 @@
   function catVars(c) { return '--bar:' + esc(c.color) + ';--bg-c:' + tint(c.color); }
 
   var ICON = {
+    chev: '<svg class="chev" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>',
     repeat: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" role="img" aria-label="반복"><path d="M2 8a6 6 0 0 1 10.5-4M14 8a6 6 0 0 1-10.5 4"/><path d="M12.5 1v3h-3M3.5 15v-3h3"/></svg>',
     pin: '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M8 15s5-4.6 5-8.5A5 5 0 0 0 3 6.5C3 10.4 8 15 8 15Z"/><circle cx="8" cy="6.5" r="1.8"/></svg>',
     star: '<svg class="star" width="12" height="12" viewBox="0 0 16 16" role="img" aria-label="중요"><path d="M8 1.6l1.9 4 4.4.5-3.3 3 .9 4.3L8 11.2 4.1 13.4l.9-4.3-3.3-3 4.4-.5z" fill="currentColor"/></svg>',
@@ -107,6 +108,7 @@
     tasks: new Map(),
     habits: new Map(),
     habitTab: 'today',
+    doneClosed: (function () { try { return localStorage.getItem('wj-done-closed') === '1'; } catch (e) { return false; } })(),
     monthAll: (function () { try { return localStorage.getItem('wj-month-all') === '1'; } catch (e) { return false; } })(),
     settings: defaultSettings(),
     mode: 'local',
@@ -370,7 +372,16 @@
         start: ev.start || null, end: ev.end || null, skip: trim(ev.skip), done: trim(ev.done) });
     });
     var hbs = habitList().map(function (h) { return { id: h.id, name: h.name, color: h.color, days: h.days, from: h.from || null, checks: trim(h.checks) }; });
-    return { v: 1, cats: cats(), hourStart: Number(S.settings.hourStart) || 8, hourEnd: Number(S.settings.hourEnd) || 24, events: evs, habits: hbs };
+    // 할 일 모음: 남은 할 일과 일정으로 옮긴 것만 (완료·미룸은 빼요). 메모는 보내지 않아요
+    var tcut = keyOf(addDays(new Date(), -14)), mcut = cut.slice(0, 7);
+    var tks = [];
+    S.tasks.forEach(function (t) {
+      var st = t.state || 'todo';
+      if (st !== 'todo' && st !== 'moved') return;
+      if (t.scope === 'week' ? !(t.period >= tcut) : !(t.period >= mcut)) return;
+      tks.push({ id: t.id, text: t.text, state: st, scope: t.scope, period: t.period, eventId: t.eventId || null, created: t.created || 0 });
+    });
+    return { v: 1, cats: cats(), hourStart: Number(S.settings.hourStart) || 8, hourEnd: Number(S.settings.hourEnd) || 24, events: evs, habits: hbs, tasks: tks };
   }
   function scheduleWidget() {
     clearTimeout(widgetTimer);
@@ -653,7 +664,11 @@
       var lev = legacyLink(t);
       if (lev) setTimeout(function () { var cur = S.tasks.get(t.id); if (cur && !cur.eventId) store.putTask(Object.assign({}, cur, { eventId: lev.id })); }, 0);
     });
-    var html = list.map(function (t) {
+    // 할 일 / 일정으로 옮김 / 미룸 / 완료로 나눠서 보여줘요
+    var GROUPS = [['todo', '할 일'], ['moved', '일정으로 옮김'], ['later', '미룸'], ['done', '완료']];
+    var byGroup = { todo: [], moved: [], later: [], done: [] };
+    list.forEach(function (t) { var v = taskView(t); (byGroup[v.state] || byGroup.todo).push(t); });
+    var row = function (t) {
       var v = taskView(t), st = v.state;
       var sub = v.note ? (v.ev
         ? '<button type="button" class="task-sub task-link" data-act="goto" title="시간표에서 보기">' + esc(v.note) + '</button>'
@@ -669,6 +684,15 @@
         '<button type="button" class="sig" data-act="cycle" aria-label="' + (st === 'done' ? '완료 취소' : '완료 표시') + '">' + SIG[st] + '</button>' +
         '<div class="task-main"><span class="task-text" data-act="edit">' + esc(v.text) + '</span>' + sub + '</div>' +
         '<div class="task-acts">' + acts + '</div></li>';
+    };
+    var html = GROUPS.map(function (g) {
+      var items = byGroup[g[0]];
+      if (!items.length) return '';
+      var closed = g[0] === 'done' && S.doneClosed;
+      var head = g[0] === 'done'
+        ? '<li class="task-gh" role="presentation"><button type="button" class="task-gh-btn" data-gtoggle="done" aria-expanded="' + !closed + '">' + g[1] + '<b>' + items.length + '</b>' + ICON.chev + '</button></li>'
+        : '<li class="task-gh g-' + g[0] + '" role="presentation"><span>' + g[1] + '</span><b>' + items.length + '</b></li>';
+      return head + (closed ? '' : items.map(row).join(''));
     }).join('');
     $('#taskList').innerHTML = html || '<li class="empty">아직 적어둔 할 일이 없어요.</li>';
   }
@@ -1876,6 +1900,8 @@
       $('#taskInput').value = '';
     });
     $('#taskList').addEventListener('click', function (e) {
+      var gt = e.target.closest('[data-gtoggle]');
+      if (gt) { S.doneClosed = !S.doneClosed; try { localStorage.setItem('wj-done-closed', S.doneClosed ? '1' : ''); } catch (er) {} render(); return; }
       var btn = e.target.closest('[data-act]'); if (!btn) return;
       var li = btn.closest('.task'), t = li && S.tasks.get(li.dataset.id); if (!t) return;
       var act = btn.dataset.act;
