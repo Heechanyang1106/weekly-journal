@@ -24,6 +24,8 @@
   --term: #a8f0b4;
   --now: #ff7a6b;
   --hour: 40px;
+  --padL: 24px;       /* 왼쪽 여백(바탕화면 아이콘 자리) */
+  --padB: 60px;       /* 아래 여백(작업 표시줄) */
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -39,7 +41,7 @@ button { cursor: pointer; }
 [hidden] { display: none !important; }
 .glass { background: var(--glass); -webkit-backdrop-filter: blur(var(--blur)); backdrop-filter: blur(var(--blur)); border: 1px solid var(--line-strong); border-radius: 14px; }
 
-.wrap { position: absolute; inset: 20px 24px 26px; display: flex; flex-direction: column; gap: 14px; }
+.wrap { position: absolute; inset: 20px 24px var(--padB) var(--padL); display: flex; flex-direction: column; gap: 14px; }
 .bar { height: 58px; flex: none; padding: 0 12px 0 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .bar-title { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
 .bar-title b { font-size: 22px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; }
@@ -129,7 +131,7 @@ button { cursor: pointer; }
 .stamp { margin-top: auto; font-size: 11px; color: rgba(255, 255, 255, .8); text-shadow: 0 1px 2px rgba(0, 0, 0, .4); text-align: right; }
 
 /* 설정 */
-.panel { position: absolute; top: 86px; right: 24px; width: 300px; z-index: 20; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; background: rgba(18, 28, 46, .86); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); border: 1px solid rgba(255, 255, 255, .3); border-radius: 14px; }
+.panel { position: absolute; top: 86px; right: 24px; width: 300px; max-height: calc(100% - 86px - var(--padB)); overflow-y: auto; z-index: 20; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; background: rgba(18, 28, 46, .86); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); border: 1px solid rgba(255, 255, 255, .3); border-radius: 14px; }
 .panel h2 { margin: 0; font-size: 15px; }
 .panel .x { width: 30px; height: 30px; border: 0; background: transparent; font-size: 15px; }
 .panel label { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
@@ -183,6 +185,8 @@ button { cursor: pointer; }
   <div style="display:flex;justify-content:space-between;align-items:center"><h2>바탕화면 설정</h2><button type="button" class="x" id="panelClose" aria-label="닫기">✕</button></div>
   <label for="sAlpha"><span><span>칸 진하기</span><b id="sAlphaV"></b></span><input id="sAlpha" type="range" min="0" max="90" step="1"></label>
   <label for="sBlur"><span><span>뒤 배경 흐림</span><b id="sBlurV"></b></span><input id="sBlur" type="range" min="0" max="30" step="1"></label>
+  <label for="sPadL"><span><span>왼쪽 여백 (바탕화면 아이콘 자리)</span><b id="sPadLV"></b></span><input id="sPadL" type="range" min="0" max="500" step="4"></label>
+  <label for="sPadB"><span><span>아래 여백 (작업 표시줄)</span><b id="sPadBV"></b></span><input id="sPadB" type="range" min="0" max="160" step="2"></label>
   <label for="sScale"><span><span>전체 크기</span><b id="sScaleV"></b></span><input id="sScale" type="range" min="70" max="160" step="5"></label>
   <div class="row">
     <span class="btn">배경 사진 고르기<input type="file" id="sPhoto" accept="image/*" aria-label="배경 사진 고르기"></span>

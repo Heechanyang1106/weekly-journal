@@ -39,7 +39,7 @@
   /* ---------- 이 바탕화면만의 설정 (브라우저 저장소) ---------- */
   function load(k, d) { try { var v = localStorage.getItem('wjw-' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
   function save(k, v) { try { localStorage.setItem('wjw-' + k, JSON.stringify(v)); } catch (e) {} }
-  var P = { alpha: load('alpha', 45), blur: load('blur', 14), scale: load('scale', 100), start: load('start', 'week'), monthAll: load('monthAll', false) };
+  var P = { alpha: load('alpha', 45), blur: load('blur', 14), scale: load('scale', 100), start: load('start', 'week'), monthAll: load('monthAll', false), padL: load('padL', 24), padB: load('padB', 60) };
 
   var S = { view: P.start, week: startOfWeek(new Date()), month: new Date(new Date().getFullYear(), new Date().getMonth(), 1), data: null };
 
@@ -245,10 +245,16 @@
     var r = document.documentElement.style;
     r.setProperty('--a', (P.alpha / 100).toFixed(2));
     r.setProperty('--blur', P.blur + 'px');
-    document.body.style.zoom = P.scale / 100;
+    var z = P.scale / 100;
+    document.body.style.zoom = z;
+    // 여백은 화면 기준 크기라 전체 크기(zoom)와 상관없이 같게
+    r.setProperty('--padL', (P.padL / z).toFixed(1) + 'px');
+    r.setProperty('--padB', (P.padB / z).toFixed(1) + 'px');
     $('#sAlpha').value = P.alpha; $('#sAlphaV').textContent = P.alpha + '%';
     $('#sBlur').value = P.blur; $('#sBlurV').textContent = P.blur + 'px';
     $('#sScale').value = P.scale; $('#sScaleV').textContent = P.scale + '%';
+    $('#sPadL').value = P.padL; $('#sPadLV').textContent = P.padL + 'px';
+    $('#sPadB').value = P.padB; $('#sPadBV').textContent = P.padB + 'px';
     $('#sStart').textContent = '처음 보기: ' + (P.start === 'month' ? '한 달' : '이번 주');
   }
   // 배경 사진은 용량이 커서 IndexedDB에 저장
@@ -308,6 +314,8 @@
     $('#sAlpha').oninput = function (e) { P.alpha = Number(e.target.value); save('alpha', P.alpha); applyLook(); };
     $('#sBlur').oninput = function (e) { P.blur = Number(e.target.value); save('blur', P.blur); applyLook(); };
     $('#sScale').oninput = function (e) { P.scale = Number(e.target.value); save('scale', P.scale); applyLook(); render(); };
+    $('#sPadL').oninput = function (e) { P.padL = Number(e.target.value); save('padL', P.padL); applyLook(); render(); };
+    $('#sPadB').oninput = function (e) { P.padB = Number(e.target.value); save('padB', P.padB); applyLook(); render(); };
     $('#sStart').onclick = function () { P.start = P.start === 'month' ? 'week' : 'month'; save('start', P.start); applyLook(); };
     $('#sPhoto').onchange = function (e) { var f = e.target.files && e.target.files[0]; if (f) savePhoto(f); e.target.value = ''; };
     $('#sPhotoReset').onclick = function () { savePhoto(null); };
