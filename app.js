@@ -55,6 +55,8 @@
   }
   function debounce(fn, ms) { var t; return function () { var a = arguments; clearTimeout(t); t = setTimeout(function () { fn.apply(null, a); }, ms); }; }
   function isDeadline(ev) { return ev.kind === 'deadline'; }
+  function holidayOf(k) { return (window.WJ_HOLIDAYS || {})[k] || ''; }
+  function termOf(k) { return (window.WJ_TERMS || {})[k] || ''; }
 
   /* ---------------- 테마 ---------------- */
   function themePref() { try { return localStorage.getItem('wj-theme') || 'system'; } catch (e) { return 'system'; } }
@@ -85,6 +87,7 @@
   var ICON = {
     repeat: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" role="img" aria-label="반복"><path d="M2 8a6 6 0 0 1 10.5-4M14 8a6 6 0 0 1-10.5 4"/><path d="M12.5 1v3h-3M3.5 15v-3h3"/></svg>',
     pin: '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M8 15s5-4.6 5-8.5A5 5 0 0 0 3 6.5C3 10.4 8 15 8 15Z"/><circle cx="8" cy="6.5" r="1.8"/></svg>',
+    star: '<svg class="star" width="12" height="12" viewBox="0 0 16 16" role="img" aria-label="중요"><path d="M8 1.6l1.9 4 4.4.5-3.3 3 .9 4.3L8 11.2 4.1 13.4l.9-4.3-3.3-3 4.4-.5z" fill="currentColor"/></svg>',
     flag: '<svg class="flag" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" role="img" aria-label="마감"><path d="M3.5 15V2M3.5 2.5h8.5l-2 3 2 3H3.5"/></svg>',
     check: '<svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.2" aria-hidden="true"><path d="m2.5 6.2 2.3 2.3 4.7-5"/></svg>',
     cal: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"/></svg>',
@@ -104,6 +107,7 @@
     tasks: new Map(),
     habits: new Map(),
     habitTab: 'today',
+    monthAll: (function () { try { return localStorage.getItem('wj-month-all') === '1'; } catch (e) { return false; } })(),
     settings: defaultSettings(),
     mode: 'local',
     user: null,
@@ -125,11 +129,14 @@
   function legacyWeekKey() { return keyOf(addDays(S.week, -1)); }
   function weekVal(obj) { obj = obj || {}; var v = obj[weekKey()]; return v != null ? v : obj[legacyWeekKey()]; }
   function monthKey() { return monthKeyOf(monthOfWeek()); }
-  function hours() {
+  function baseHours() {
     var hs = Number(S.settings.hourStart), he = Number(S.settings.hourEnd);
     if (!(he > hs)) { hs = 8; he = 24; }
     return { hs: hs, he: he };
   }
+  // 지금 화면에 그려진 시간표 범위 (범위 밖 일정이 있으면 그 주만 자동으로 넓어져요)
+  function hours() { return S.gridRange || baseHours(); }
+  var DEFAULT_START = '09:00'; // 시간을 안 정한 일정은 09:00으로
 
   /* ---------------- 저장소: 이 기기 ---------------- */
   function makeLocalStore() {
@@ -207,7 +214,15 @@
         putSettings: function (p) {
           Object.assign(S.settings, p); render();
           fs.setDoc(settingsRef(), plain(p), { merge: true }).catch(fail);
-        }
+        },
+        // 바탕화면 달력: 비밀 주소(키) 문서에 일정 사본을 올려요 (읽기만 공개)
+        pubWidget: function (key, data) {
+          return fs.setDoc(fs.doc(db, 'widgets', key), plain(Object.assign({ owner: uid }, data))).catch(function (e) {
+            console.error(e);
+            toast('바탕화면 달력을 업데이트하지 못했어요. 안내서의 "바탕화면 규칙" 단계를 확인해 주세요.');
+          });
+        },
+        delWidget: function (key) { return fs.deleteDoc(fs.doc(db, 'widgets', key)).catch(function () {}); }
       };
 
       authM.onAuthStateChanged(auth, function (user) {
@@ -337,6 +352,69 @@
     if (S.view === 'month') renderMonth(); else renderGrid();
     renderSide();
     if (pendingLink && S.loaded) showLinkDialog();
+    if (S.loaded && !migratedUntimed) migrateUntimed();
+    if (S.loaded && S.mode === 'cloud' && S.settings.widgetToken) scheduleWidget();
+  }
+
+  /* ---------------- 바탕화면 달력으로 보내기 ---------------- */
+  var widgetTimer = null, lastWidgetJson = '';
+  function widgetPayload() {
+    var cut = keyOf(addDays(new Date(), -60));
+    var trim = function (m) { var o = {}; Object.keys(m || {}).forEach(function (k) { if (k >= cut) o[k] = true; }); return o; };
+    var evs = [];
+    S.events.forEach(function (ev) {
+      if (ev.repeat === 'weekly' ? (ev.until && ev.until < cut) : (ev.date && ev.date < cut)) return;
+      // 메모는 보내지 않아요
+      evs.push({ id: ev.id, kind: ev.kind || 'event', title: ev.title, place: ev.place || '', cat: ev.cat, star: !!ev.star,
+        repeat: ev.repeat || 'once', date: ev.date || null, days: ev.days || null, from: ev.from || null, until: ev.until || null,
+        start: ev.start || null, end: ev.end || null, skip: trim(ev.skip), done: trim(ev.done) });
+    });
+    var hbs = habitList().map(function (h) { return { id: h.id, name: h.name, color: h.color, days: h.days, from: h.from || null, checks: trim(h.checks) }; });
+    return { v: 1, cats: cats(), hourStart: Number(S.settings.hourStart) || 8, hourEnd: Number(S.settings.hourEnd) || 24, events: evs, habits: hbs };
+  }
+  function scheduleWidget() {
+    clearTimeout(widgetTimer);
+    widgetTimer = setTimeout(function () {
+      var key = S.settings.widgetToken; if (!key || !store.pubWidget) return;
+      var data = widgetPayload(), json = key + JSON.stringify(data);
+      if (json === lastWidgetJson) return;
+      lastWidgetJson = json;
+      data.updated = Date.now();
+      store.pubWidget(key, data);
+    }, 1500);
+  }
+  function newWidgetKey() {
+    var a = new Uint8Array(24);
+    (window.crypto || window.msCrypto).getRandomValues(a);
+    return Array.from(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+  }
+  function widgetUrl(key) { return location.origin + location.pathname.replace(/[^/]*$/, '') + 'widget.html#k=' + key; }
+  function renderWidgetSettings() {
+    var cloud = S.mode === 'cloud', key = S.settings.widgetToken;
+    $('#widgetText').textContent = !cloud ? '바탕화면 달력은 로그인(동기화) 모드에서만 쓸 수 있어요.'
+      : key ? '아래 주소를 Lively Wallpaper에 넣으면 바탕화면에 이 일정이 떠요. 주소를 아는 사람은 일정을 볼 수 있으니 다른 사람에게 알려주지 마세요.'
+      : '바탕화면 주소를 만들면 Lively Wallpaper로 바탕화면에 일정을 띄울 수 있어요. 메모는 바탕화면으로 보내지 않아요.';
+    $('#widgetUrlRow').hidden = !key;
+    if (key) $('#widgetUrl').value = widgetUrl(key);
+    $('#widgetOn').hidden = !cloud || !!key;
+    $('#widgetNew').hidden = !key;
+    $('#widgetOff').hidden = !key;
+  }
+
+  // '시간 미정' 기능을 없애면서, 아직 안 지난 시간 미정 일정은 09:00–10:00으로 옮겨요 (한 번만)
+  var migratedUntimed = false;
+  function migrateUntimed() {
+    migratedUntimed = true;
+    var tk = todayKey(), n = 0;
+    S.events.forEach(function (ev) {
+      if (isDeadline(ev) || (!ev.untimed && ev.start && !ev.openEnd)) return;
+      var upcoming = ev.repeat === 'weekly' ? (!ev.until || ev.until >= tk) : (ev.date && ev.date >= tk);
+      if (!upcoming) return;
+      var st = !ev.untimed && ev.start ? ev.start : DEFAULT_START;
+      store.putEvent(Object.assign({}, ev, { untimed: false, start: st, end: storeEnd(Math.min(toMin(st) + 60, 1440)), openEnd: false, updated: Date.now() }));
+      n++;
+    });
+    if (n) setTimeout(function () { toast('시간이나 끝나는 시간이 미정이던 일정 ' + n + '개를 정리했어요'); }, 300);
   }
 
   function renderHeader() {
@@ -385,14 +463,24 @@
   function evTimeText(ev) {
     if (isDeadline(ev)) return (ev.start || '23:59') + ' 마감';
     if (ev.untimed || !ev.start) return '시간 미정';
-    return ev.start + (ev.openEnd ? '~' : (ev.end ? '–' + fromMin(endMin(ev.end)) : ''));
+    return ev.start + '–' + fromMin(ev.end ? endMin(ev.end) : Math.min(toMin(ev.start) + 60, 1440));
   }
 
   function renderGrid() {
-    var h = hours(), hs = h.hs, he = h.he;
-    var rows = he - hs, H = HOUR;
     var keys = weekKeys();
     var occ = occurrencesFor(keys);
+    // 이 주의 일정이 설정한 범위를 벗어나면 범위를 넓혀서 모두 보이게
+    var h = baseHours(), hs = h.hs, he = h.he;
+    occ.forEach(function (list) {
+      list.forEach(function (o) {
+        var s = toMin(o.ev.start || DEFAULT_START);
+        var e = isDeadline(o.ev) ? s + 1 : (o.ev.end && o.ev.start ? endMin(o.ev.end) : s + 60);
+        hs = Math.min(hs, Math.floor(s / 60));
+        he = Math.max(he, Math.min(24, Math.ceil(e / 60)));
+      });
+    });
+    S.gridRange = { hs: hs, he: he };
+    var rows = he - hs, H = HOUR;
     var now = new Date(), tk = keyOf(now);
     var doneTotal = 0, allTotal = 0;
 
@@ -401,37 +489,25 @@
       var d = parseKey(k);
       var list = occ[i], dn = list.filter(function (o) { return o.done; }).length;
       doneTotal += dn; allTotal += list.length;
-      var dw = d.getDay();
+      var dw = d.getDay(), hol = holidayOf(k), term = termOf(k);
       html += '<div class="tt-head' + (k === tk ? ' is-today' : '') + '">' +
-        '<div class="d1"><span class="dow' + (dw === 0 ? ' sun' : dw === 6 ? ' sat' : '') + '">' + DOW[dw] + '</span>' +
-        '<span class="date">' + pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + '</span></div>' +
+        '<div class="d1"><span class="dow' + (dw === 0 || hol ? ' sun' : dw === 6 ? ' sat' : '') + '">' + DOW[dw] + '</span>' +
+        '<span class="date' + (hol ? ' is-hol' : '') + '">' + pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + '</span>' +
+        (hol ? '<span class="hol">' + esc(hol) + '</span>' : '') + (term ? '<span class="term">' + esc(term) + '</span>' : '') + '</div>' +
         '<span class="sum">' + (list.length ? list.length + '개 · ' + dn + ' 완료' : '일정 없음') + '</span></div>';
     });
 
-    // 시간 미정 줄
-    html += '<div class="tt-un-label">미정</div>';
     var timed = keys.map(function () { return []; });
     var dls = keys.map(function () { return []; });
     keys.forEach(function (k, i) {
-      var chips = '';
       occ[i].forEach(function (o) {
-        var ev = o.ev, c = catOf(ev.cat);
-        var s = toMin(ev.start);
-        if (isDeadline(ev)) {
-          if (s == null) s = 1439;
-          if (s >= hs * 60 && s <= he * 60) { dls[i].push({ o: o, s: s }); return; }
-          chips += chipHtml(o, k, c, (ev.start || '23:59') + ' ' + ev.title, true);
-          return;
-        }
-        var e = ev.end ? endMin(ev.end) : (s != null ? s + 60 : null);
-        var outside = s != null && (e <= hs * 60 || s >= he * 60);
-        if (ev.untimed || s == null || outside) {
-          chips += chipHtml(o, k, c, (outside ? ev.start + ' ' : '') + ev.title, false);
-        } else {
-          timed[i].push({ o: o, s: Math.max(s, hs * 60), e: Math.min(Math.max(e, s + 15), he * 60), rs: s, re: e });
-        }
+        var ev = o.ev;
+        if (isDeadline(ev)) { dls[i].push({ o: o, s: clamp(toMin(ev.start || '23:59'), hs * 60, he * 60) }); return; }
+        // 예전에 '시간 미정'으로 넣은 일정은 09:00에 보여줘요
+        var s = toMin(ev.start || DEFAULT_START);
+        var e = ev.end && ev.start ? endMin(ev.end) : s + 60;
+        timed[i].push({ o: o, s: clamp(s, hs * 60, he * 60 - 15), e: Math.min(Math.max(e, s + 15), he * 60), rs: s, re: e });
       });
-      html += '<div class="tt-un" data-date="' + k + '">' + chips + '</div>';
     });
 
     // 시간 눈금
@@ -450,15 +526,15 @@
         var short = height < 44;
         var w = 100 / it.lanes;
         var time = evTimeText(ev);
-        var canResize = !ev.openEnd && it.re <= he * 60;
-        html += '<div class="ev' + (it.o.done ? ' is-done' : '') + (short ? ' is-short' : '') + (ev.openEnd ? ' open-end' : '') + '"' +
+        var canResize = it.re <= he * 60;
+        html += '<div class="ev' + (it.o.done ? ' is-done' : '') + (short ? ' is-short' : '') + (ev.star ? ' is-star' : '') + '"' +
           ' data-ev="' + esc(ev.id) + '" data-date="' + k + '" tabindex="0" role="button"' +
           ' aria-label="' + esc(ev.title + ', ' + time + (ev.place ? ', ' + ev.place : '')) + '"' +
-          ' title="' + esc(ev.title + '\n' + time + (ev.openEnd ? ' (끝 미정)' : '') + (ev.place ? '\n' + ev.place : '') + (ev.memo ? '\n' + ev.memo : '')) + '"' +
+          ' title="' + esc(ev.title + '\n' + time + (ev.place ? '\n' + ev.place : '') + (ev.memo ? '\n' + ev.memo : '')) + '"' +
           ' style="top:' + (top + 1) + 'px;height:' + Math.max(height - 2, 20) + 'px;left:calc(' + (it.lane * w) + '% + 3px);width:calc(' + w + '% - 6px);' + catVars(c) + '">' +
           '<div class="ev-body"><div class="ev-title">' + (short ? '<span class="ev-time-inline">' + esc(ev.start) + '</span>' : '') +
-          '<span class="t">' + esc(ev.title) + '</span>' + (ev.repeat === 'weekly' ? ICON.repeat : '') + '</div>' +
-          (!short ? '<div class="ev-meta"><span class="t ev-time">' + esc(time) + (ev.openEnd ? ' · 끝 미정' : '') + '</span></div>' : '') +
+          (ev.star ? ICON.star : '') + '<span class="t">' + esc(ev.title) + '</span>' + (ev.repeat === 'weekly' ? ICON.repeat : '') + '</div>' +
+          (!short ? '<div class="ev-meta"><span class="t ev-time">' + esc(time) + '</span></div>' : '') +
           (ev.place && height >= 76 ? '<div class="ev-meta">' + ICON.pin + '<span class="t">' + esc(ev.place) + '</span></div>' : '') +
           (ev.memo && height >= 110 ? '<div class="ev-meta"><span class="t">' + esc(ev.memo) + '</span></div>' : '') +
           '</div><button type="button" class="ev-check" data-check aria-label="' + esc(ev.title) + (it.o.done ? ' 완료 취소' : ' 완료 표시') + '">' + (it.o.done ? ICON.check : '') + '</button>' +
@@ -509,23 +585,32 @@
     var keys = [];
     for (var d = start; d <= end; d = addDays(d, 1)) keys.push(keyOf(d));
     var occ = occurrencesFor(keys), tk = todayKey(), m = first.getMonth();
-    var html = '<div class="mo-head">' + WEEK_ORDER.map(function (i) { return '<div class="' + (i === 0 ? 'sun' : i === 6 ? 'sat' : '') + '">' + DOW[i] + '</div>'; }).join('') + '</div>';
+    var all = S.monthAll;
+    var html = '<div class="mo-bar"><div class="pill-tabs" role="tablist" aria-label="한 달 보기에 보여줄 일정">' +
+      '<button type="button" role="tab" data-mfilter="imp" aria-selected="' + !all + '">★ 중요만</button>' +
+      '<button type="button" role="tab" data-mfilter="all" aria-selected="' + all + '">전체</button></div>' +
+      '<span class="mo-note">' + (all ? '모든 일정을 보여줘요' : '★ 중요 일정 · 마감 · 공휴일만 보여줘요. 흐린 숫자는 숨긴 일정 수예요') + '</span></div>';
+    html += '<div class="mo-head">' + WEEK_ORDER.map(function (i) { return '<div class="' + (i === 0 ? 'sun' : i === 6 ? 'sat' : '') + '">' + DOW[i] + '</div>'; }).join('') + '</div>';
     for (var w = 0; w < keys.length; w += 7) {
       html += '<div class="mo-week">';
       for (var i = w; i < w + 7; i++) {
         var k = keys[i], dt = parseKey(k), list = occ[i];
-        var cls = 'mo-day' + (dt.getMonth() !== m ? ' other' : '') + (k === tk ? ' is-today' : '') + (dt.getDay() === 0 ? ' sun' : dt.getDay() === 6 ? ' sat' : '');
-        var items = list.slice().sort(function (a, b) { return (isDeadline(b.ev) ? 1 : 0) - (isDeadline(a.ev) ? 1 : 0); });
+        var hol = holidayOf(k), term = termOf(k);
+        var cls = 'mo-day' + (dt.getMonth() !== m ? ' other' : '') + (k === tk ? ' is-today' : '') + (dt.getDay() === 0 || hol ? ' sun' : dt.getDay() === 6 ? ' sat' : '');
+        var items = list.filter(function (o) { return all || o.ev.star || isDeadline(o.ev); })
+          .sort(function (a, b) { return (isDeadline(b.ev) ? 1 : 0) - (isDeadline(a.ev) ? 1 : 0); });
+        var hidden = list.length - items.length;
         var shown = items.slice(0, 4);
         var label = mdDow(k) + (list.length ? ', 일정 ' + list.length + '개' : '');
         html += '<button type="button" class="' + cls + '" data-date="' + k + '" aria-label="' + esc(label) + ' — 이 주 보기">' +
-          '<span class="mo-num">' + dt.getDate() + '</span><span class="m-items">' +
+          '<span class="mo-top"><span class="mo-num">' + dt.getDate() + '</span>' + (hol || term ? '<span class="' + (hol ? 'hol' : 'term') + '">' + esc(hol || term) + '</span>' : '') + '</span><span class="m-items">' +
           shown.map(function (o) {
             var ev = o.ev, c = catOf(ev.cat), dl = isDeadline(ev);
             return '<span class="m-item' + (dl ? ' is-dl' : '') + (o.done ? ' is-done' : '') + '" style="' + catVars(c) + '" title="' + esc(evTimeText(ev) + ' ' + ev.title) + '">' +
-              (dl ? ICON.flag : '') + (!dl && ev.start && !ev.untimed ? '<span class="tm">' + esc(ev.start) + '</span>' : '') + '<span class="t">' + esc(ev.title) + '</span></span>';
+              (dl ? ICON.flag : ev.star ? ICON.star : '') + (!dl && ev.start && !ev.untimed ? '<span class="tm">' + esc(ev.start) + '</span>' : '') + '<span class="t">' + esc(ev.title) + '</span></span>';
           }).join('') +
           (items.length > shown.length ? '<span class="m-more">+' + (items.length - shown.length) + '개</span>' : '') +
+          (!all && hidden ? '<span class="m-hidden" title="숨긴 일반 일정">+' + hidden + '</span>' : '') +
           '</span></button>';
       }
       html += '</div>';
@@ -670,10 +755,11 @@
       kind: ev ? (ev.kind || 'event') : (opts.kind || 'event'),
       mode: ev ? (ev.repeat || 'once') : 'once',
       days: ev && ev.days ? ev.days.slice() : [parseKey(date).getDay()],
-      cat: ev ? ev.cat : (opts.cat || cats()[0].id)
+      cat: ev ? ev.cat : (opts.cat || cats()[0].id),
+      star: ev ? !!ev.star : !!opts.star
     };
     if (ev && !catOf(E.cat)) E.cat = cats()[0].id;
-    var start = ev ? (ev.start || '') : (opts.start || '');
+    var start = ev ? (ev.start || DEFAULT_START) : (opts.start || DEFAULT_START);
     var end = ev ? (ev.end || '') : (opts.end || (opts.start ? fromMin(Math.min(toMin(opts.start) + 60, 1439)) : ''));
     $('#fTitle').value = ev ? ev.title : (opts.title || '');
     $('#fDate').value = ev && ev.date ? ev.date : date;
@@ -681,8 +767,6 @@
     $('#fUntil').value = ev && ev.until ? ev.until : '';
     $('#fStart').value = start;
     $('#fEnd').value = end === '24:00' ? '00:00' : end;
-    $('#fUntimed').checked = ev ? !!ev.untimed : !!opts.untimed;
-    $('#fOpenEnd').checked = ev ? !!ev.openEnd : false;
     $('#fPlace').value = ev ? (ev.place || '') : '';
     $('#fMemo').value = ev ? (ev.memo || '') : '';
     $('#evDelete').hidden = !ev;
@@ -703,11 +787,12 @@
     $('#kindEvent').setAttribute('aria-checked', !dl);
     $('#kindDeadline').setAttribute('aria-checked', dl);
     $('#fTitleLabel').textContent = dl ? '마감 이름' : '일정';
+    $('#fStar').setAttribute('aria-pressed', !!E.star);
+    $('#fStar').textContent = E.star ? '★ 중요' : '☆ 중요';
     $('#fTitle').placeholder = dl ? '예: 과제 제출' : '예: 동아리 모임';
     $('#fStartLabel').textContent = dl ? '마감 시각' : '시작';
     $('#endField').hidden = dl;
     $('#timeRow').classList.toggle('one', dl);
-    $('#checksRow').hidden = dl;
     $('#placeField').hidden = dl;
     $('#modeOnce').setAttribute('aria-checked', !weekly);
     $('#modeWeekly').setAttribute('aria-checked', weekly);
@@ -718,10 +803,7 @@
       var d = DOW[i];
       return '<button type="button" data-day="' + i + '" class="' + (i === 0 ? 'sun' : i === 6 ? 'sat' : '') + '" aria-pressed="' + (E.days.indexOf(i) >= 0) + '">' + d + '</button>';
     }).join('');
-    var untimed = !dl && $('#fUntimed').checked, openEnd = $('#fOpenEnd').checked;
-    $('#fStart').disabled = untimed;
-    $('#fEnd').disabled = untimed || openEnd;
-    $('#fOpenEnd').disabled = untimed;
+
     $('#catChips').innerHTML = cats().map(function (c) {
       return '<button type="button" data-cat="' + esc(c.id) + '" aria-pressed="' + (c.id === E.cat) + '" style="' + catVars(c) + '">' + esc(c.name) + '</button>';
     }).join('') + '<button type="button" class="add-cat" data-cat-edit aria-label="카테고리 편집">+ 편집</button>';
@@ -729,10 +811,9 @@
   }
   function summaryText() {
     var dl = E.kind === 'deadline';
-    var untimed = !dl && $('#fUntimed').checked, openEnd = $('#fOpenEnd').checked;
     var s = $('#fStart').value, e = $('#fEnd').value;
     var time = dl ? (s || '23:59') + ' 마감'
-      : untimed ? '시간 미정' : (s ? s + (openEnd ? '~ (끝 미정)' : (e ? '–' + (e === '00:00' ? '24:00' : e) : '')) : '시간을 정해 주세요');
+      : (s ? s + (e ? '–' + (e === '00:00' ? '24:00' : e) : '') : '시간을 정해 주세요');
     if (E.mode === 'weekly') {
       if (!E.days.length) return '반복할 요일을 골라 주세요';
       var days = [dayLabels(E.days)];
@@ -751,11 +832,11 @@
     var dl = E.kind === 'deadline';
     var title = $('#fTitle').value.trim();
     if (!title) return err(dl ? '마감 이름을 적어 주세요.' : '일정 이름을 적어 주세요.');
-    var untimed = !dl && $('#fUntimed').checked, openEnd = !dl && !untimed && $('#fOpenEnd').checked;
+    var untimed = false, openEnd = false;
     var start = $('#fStart').value, end = $('#fEnd').value;
     if (dl) { if (!start) start = '23:59'; end = null; }
     else if (!untimed) {
-      if (!start) return err('시작 시간을 정하거나 "시간 미정"을 체크해 주세요.');
+      if (!start) return err('시작 시간을 정해 주세요.');
       if (!openEnd && end && endMin(end) <= toMin(start)) return err('끝 시간이 시작 시간보다 늦어야 해요.');
       if (!openEnd && !end) end = storeEnd(Math.min(toMin(start) + 60, 1440));
     }
@@ -767,6 +848,7 @@
       place: dl ? '' : $('#fPlace').value.trim(),
       memo: $('#fMemo').value.trim(),
       cat: E.cat,
+      star: !!E.star,
       repeat: E.mode,
       untimed: untimed,
       openEnd: openEnd,
@@ -1248,6 +1330,7 @@
     renderCatRows();
     renderThemeToggle();
     renderArchived();
+    renderWidgetSettings();
     var hs = $('#hourStart'), he = $('#hourEnd'), o1 = '', o2 = '';
     for (var h = 0; h <= 23; h++) o1 += '<option value="' + h + '">' + pad(h) + ':00</option>';
     for (var h2 = 1; h2 <= 24; h2++) o2 += '<option value="' + h2 + '">' + pad(h2) + ':00</option>';
@@ -1320,7 +1403,7 @@
 
   /* ---------------- 링크로 일정 추가·수정·삭제 (#add=...) ----------------
    * 주소 뒤에 #add=<JSON> 을 붙이면 확인 후 적용해요. JSON은 항목 하나 {…} 또는 여러 개 […].
-   * 추가:  t 제목, d 날짜(YYYY-MM-DD), s 시작, e 끝, p 장소, m 메모, c 카테고리, u 시간 미정, o 끝 미정,
+   * 추가:  t 제목, d 날짜(YYYY-MM-DD), s 시작, e 끝, p 장소, m 메모, c 카테고리, 
    *        w 매주 반복 요일 [0=일 … 6=토], f 반복 시작일, l 반복 종료일, dl:true 마감(s = 마감 시각, 기본 23:59)
    *        할 일: {"todo":"내용"} (+ d 그 주 목록, month:true 그 달 목록)
    * 수정:  {"op":"edit","find":"전공 수업","set":{"m":"동영상강의"}}  (+ d: 그 날짜에 있는 것만. 반복 일정이면 그날만, all:true면 전체)
@@ -1392,11 +1475,12 @@
     if (set.p != null) put('place', String(set.p).slice(0, 100), '장소');
     if (set.m != null) put('memo', String(set.m).slice(0, 1000), '메모');
     if (set.c != null) { var c = findCat(set.c); put('cat', c.id, '카테고리', c.name); }
-    if (set.u === true) { put('untimed', true, '시간', '미정'); n.start = null; n.end = null; n.openEnd = false; }
-    if (set.s != null || set.e != null || set.o != null) {
+    if (set.star != null) put('star', !!set.star, '중요', set.star ? '★ 표시' : '해제');
+
+    if (set.s != null || set.e != null) {
       var s = set.s != null ? normTime(set.s) : n.start, e = set.e != null ? normTime(set.e) : n.end;
       if (s === undefined || e === undefined) return { bad: '시간을 읽을 수 없어요' };
-      var oe = set.o != null ? !!set.o : (set.e != null ? false : !!n.openEnd);
+      var oe = false;
       if (isDeadline(n)) { e = null; oe = false; }
       if (s && e && !oe && endMin(e) <= toMin(s)) return { bad: '끝 시간이 시작보다 빨라요' };
       if (s !== n.start || e !== n.end || oe !== !!n.openEnd) {
@@ -1448,14 +1532,15 @@
     var s = normTime(x.s), e = normTime(x.e);
     if (s === undefined || e === undefined) return [{ bad: title + ': 시간을 읽을 수 없어요' }];
     if (dl && !s) s = '23:59';
-    var untimed = !dl && (!!x.u || !s);
-    var openEnd = !dl && !untimed && !!x.o;
+    if (!dl && !s) s = DEFAULT_START; // 시간이 없으면 09:00
+    var untimed = false;
+    var openEnd = false;
     if (!dl && !untimed && !openEnd && !e) e = storeEnd(Math.min(toMin(s) + 60, 1440));
     if (!dl && !untimed && !openEnd && endMin(e) <= toMin(s)) return [{ bad: title + ': 끝 시간이 시작보다 빨라요' }];
     var c = findCat(x.c);
     var ev = {
       id: id, kind: dl ? 'deadline' : 'event', title: title, place: dl ? '' : String(x.p || x.place || '').slice(0, 100), memo: String(x.m || x.memo || '').slice(0, 1000),
-      cat: c.id, repeat: weekly ? 'weekly' : 'once', untimed: untimed, openEnd: openEnd,
+      cat: c.id, star: !!x.star, repeat: weekly ? 'weekly' : 'once', untimed: untimed, openEnd: openEnd,
       start: untimed ? null : s, end: untimed || openEnd || dl ? null : e,
       done: {}, skip: {}, created: Date.now(), updated: Date.now(), via: 'link'
     };
@@ -1698,8 +1783,6 @@
       }
       var col = e.target.closest('.tt-col');
       if (col) { openEditor({ date: col.dataset.date, start: fromMin(minuteAt(col, e.clientY)) }); return; }
-      var un = e.target.closest('.tt-un');
-      if (un) openEditor({ date: un.dataset.date, untimed: true });
     });
     grid.addEventListener('keydown', function (e) {
       var item = e.target.closest('.ev');
@@ -1719,6 +1802,12 @@
 
     // 한 달 보기: 날짜 → 그 주
     $('#month').addEventListener('click', function (e) {
+      var mf = e.target.closest('[data-mfilter]');
+      if (mf) {
+        S.monthAll = mf.dataset.mfilter === 'all';
+        try { localStorage.setItem('wj-month-all', S.monthAll ? '1' : ''); } catch (er) {}
+        renderMonth(); return;
+      }
       var day = e.target.closest('.mo-day'); if (!day) return;
       S.week = startOfWeek(parseKey(day.dataset.date));
       setView('week');
@@ -1753,11 +1842,11 @@
     }
     grid.addEventListener('dragover', function (e) {
       if (!dragId) return;
-      var col = e.target.closest('.tt-col'), un = e.target.closest('.tt-un');
-      if (!col && !un) return;
+      var col = e.target.closest('.tt-col');
+      if (!col) return;
       e.preventDefault();
       clearDrop();
-      (col || un).classList.add('drop');
+      col.classList.add('drop');
       if (col) {
         dropLine = document.createElement('div');
         dropLine.className = 'drop-line';
@@ -1769,11 +1858,10 @@
     grid.addEventListener('drop', function (e) {
       if (!dragId) return;
       e.preventDefault();
-      var t = S.tasks.get(dragId), col = e.target.closest('.tt-col'), un = e.target.closest('.tt-un');
+      var t = S.tasks.get(dragId), col = e.target.closest('.tt-col');
       clearDrop();
       if (!t) return;
       if (col) openEditor({ date: col.dataset.date, start: fromMin(minuteAt(col, e.clientY)), title: t.text, taskId: t.id });
-      else if (un) openEditor({ date: un.dataset.date, untimed: true, title: t.text, taskId: t.id });
       dragId = null;
     });
 
@@ -1815,9 +1903,10 @@
     // 일정 창
     var dlg = $('#evDialog');
     $('#kindEvent').onclick = function () { E.kind = 'event'; renderEditor(); };
+    $('#fStar').onclick = function () { E.star = !E.star; renderEditor(); };
     $('#kindDeadline').onclick = function () {
       E.kind = 'deadline';
-      if (!$('#fStart').value || $('#fUntimed').checked) { $('#fStart').value = '23:59'; $('#fUntimed').checked = false; }
+      if (!$('#fStart').value) $('#fStart').value = '23:59';
       renderEditor();
     };
     $('#modeOnce').onclick = function () { E.mode = 'once'; renderEditor(); };
@@ -1833,7 +1922,7 @@
       if (b) { E.cat = b.dataset.cat; renderEditor(); return; }
       if (e.target.closest('[data-cat-edit]')) openSettings();
     });
-    ['#fStart', '#fEnd', '#fDate', '#fFrom', '#fUntil', '#fUntimed', '#fOpenEnd'].forEach(function (s) {
+    ['#fStart', '#fEnd', '#fDate', '#fFrom', '#fUntil'].forEach(function (s) {
       $(s).addEventListener('input', renderEditor);
       $(s).addEventListener('change', renderEditor);
     });
@@ -1919,6 +2008,39 @@
       var p = readLinkPayload();
       if (p) { pendingLink = p; render(); }
     });
+
+    // 바탕화면 달력
+    $('#widgetOn').onclick = function () {
+      store.putSettings({ widgetToken: newWidgetKey() }); lastWidgetJson = '';
+      renderWidgetSettings(); toast('바탕화면 주소를 만들었어요');
+    };
+    $('#widgetNew').onclick = function () {
+      var old = S.settings.widgetToken;
+      $('#setDialog').close();
+      choose({ title: '새 주소로 바꾸기', text: '지금 주소는 더 이상 쓸 수 없게 돼요. 바꾼 뒤 새 주소를 Lively에 다시 넣어야 해요.', b: '새 주소로 바꾸기' }, function (r) {
+        if (!r) { openSettings(); return; }
+        if (old && store.delWidget) store.delWidget(old);
+        store.putSettings({ widgetToken: newWidgetKey() }); lastWidgetJson = '';
+        openSettings(); toast('새 주소를 만들었어요. Lively에 다시 넣어 주세요');
+      });
+    };
+    $('#widgetOff').onclick = function () {
+      var old = S.settings.widgetToken;
+      $('#setDialog').close();
+      choose({ title: '바탕화면 달력 끄기', text: '바탕화면 주소가 지워지고 바탕화면에 일정이 더 이상 뜨지 않아요.', b: '끄기', danger: true }, function (r) {
+        if (!r) { openSettings(); return; }
+        if (old && store.delWidget) store.delWidget(old);
+        store.putSettings({ widgetToken: null }); lastWidgetJson = '';
+        openSettings(); toast('바탕화면 달력을 껐어요');
+      });
+    };
+    $('#widgetCopy').onclick = function () {
+      var inp = $('#widgetUrl');
+      var done = function () { toast('주소를 복사했어요'); };
+      var fallback = function () { inp.select(); try { document.execCommand('copy'); done(); } catch (e) { toast('주소를 길게 눌러 직접 복사해 주세요'); } };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(inp.value).then(done, fallback);
+      else fallback();
+    };
 
     // 매일 체크
     $('#hbTabToday').onclick = function () { S.habitTab = 'today'; renderHabits(); };
@@ -2008,7 +2130,7 @@
     var d1 = ev(6, '보고서 제출', '23:59', null, 'study'); d1.kind = 'deadline';
     var d2 = ev(1, '온라인 강의 수강', '23:59', null, 'study', '', true); d2.kind = 'deadline'; d2.done = {};
     raw.events.push(d1, d2);
-    raw.events.push({ id: newId(), kind: 'event', title: '택배 찾기', repeat: 'once', date: k(5), untimed: true, openEnd: false, start: null, end: null, cat: 'tbd', place: '', memo: '', done: {}, skip: {}, created: Date.now() });
+    raw.events.push({ id: newId(), kind: 'event', title: '택배 찾기', repeat: 'once', date: k(5), untimed: false, openEnd: false, start: '09:00', end: '10:00', cat: 'tbd', place: '', memo: '', done: {}, skip: {}, created: Date.now() });
     var wk = keyOf(w);
     raw.tasks = [
       { text: '도서관 책 반납', state: 'todo' },

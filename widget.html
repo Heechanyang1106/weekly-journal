@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>한 주 저널 바탕화면</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* 바탕화면 달력: 배경 사진 위에 어두운 반투명 유리 칸. 색은 모두 흰 글자 기준 */
+:root {
+  --a: .45;            /* 칸 진하기 */
+  --blur: 14px;        /* 뒤 배경 흐림 */
+  --glass: rgba(18, 28, 46, var(--a));
+  --line: rgba(255, 255, 255, .14);
+  --line-strong: rgba(255, 255, 255, .24);
+  --ink: #ffffff;
+  --ink-2: rgba(255, 255, 255, .82);
+  --faint: rgba(255, 255, 255, .62);
+  --chip: rgba(255, 255, 255, .14);
+  --sun: #ffb0a6;
+  --sat: #b9cdf5;
+  --term: #a8f0b4;
+  --now: #ff7a6b;
+  --hour: 40px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; overflow: hidden; }
+body {
+  font-family: 'IBM Plex Sans KR', system-ui, 'Malgun Gothic', sans-serif; color: var(--ink); font-size: 14px;
+  background: linear-gradient(180deg, #7fa9d3 0%, #a9c6e2 26%, #d7e2ea 44%, #e9d6bf 50%, #6f9fc4 51%, #4f86b0 60%, #d9bf9c 61%, #c8a47c 78%, #9d7a55 100%);
+  background-size: cover; background-position: center;
+}
+body.has-photo { background: #000 var(--photo) center / cover no-repeat; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+[hidden] { display: none !important; }
+.glass { background: var(--glass); -webkit-backdrop-filter: blur(var(--blur)); backdrop-filter: blur(var(--blur)); border: 1px solid var(--line-strong); border-radius: 14px; }
+
+.wrap { position: absolute; inset: 20px 24px 26px; display: flex; flex-direction: column; gap: 14px; }
+.bar { height: 58px; flex: none; padding: 0 12px 0 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.bar-title { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.bar-title b { font-size: 22px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; }
+.bar-title span { font-size: 14px; color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bar-right { display: flex; align-items: center; gap: 8px; }
+.pills { display: flex; background: var(--chip); border-radius: 999px; padding: 3px; }
+.pills button { height: 30px; padding: 0 13px; border: 0; border-radius: 999px; background: transparent; font-size: 13px; }
+.pills button[aria-checked="true"] { background: rgba(255, 255, 255, .92); color: #1d2a3a; font-weight: 700; }
+.nav { display: flex; align-items: center; background: var(--chip); border-radius: 999px; }
+.nav button { height: 36px; min-width: 36px; padding: 0 8px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; border-radius: 999px; }
+.round { width: 36px; height: 36px; border: 0; border-radius: 999px; background: var(--chip); display: flex; align-items: center; justify-content: center; color: var(--ink); text-decoration: none; }
+.nav button:hover, .round:hover, .pills button:hover { background-color: rgba(255, 255, 255, .22); }
+.pills button[aria-checked="true"]:hover { background: #ffffff; }
+
+.main { flex: 1; min-height: 0; display: flex; gap: 14px; }
+.board { flex: 1; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
+.side { width: 300px; flex: none; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.card { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.card h2 { margin: 0; font-size: 16px; font-weight: 700; }
+.card .sub { font-size: 12px; color: var(--faint); font-weight: 400; margin-left: 6px; }
+
+/* 주간 */
+.wk-head, .wk-body { display: grid; grid-template-columns: 48px repeat(7, minmax(0, 1fr)); }
+.wk-head { border-bottom: 1px solid var(--line-strong); flex: none; }
+.wk-day { padding: 9px 8px 7px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.wk-day.is-today { background: rgba(255, 255, 255, .14); box-shadow: inset 0 -3px 0 #ffffff; }
+.wk-day .d1 { display: flex; align-items: baseline; gap: 6px; }
+.wk-day .dow { font-size: 13px; font-weight: 700; }
+.wk-day .date { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sun { color: var(--sun); } .sat { color: var(--sat); }
+.lbl { font-size: 11px; font-weight: 600; min-height: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lbl.hol { color: var(--sun); } .lbl.term { color: var(--term); }
+.wk-body { flex: 1; min-height: 0; }
+.wk-times { position: relative; }
+.wk-times span { position: absolute; right: 7px; font-size: 10.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; transform: translateY(-50%); }
+.wk-times span:first-child { transform: none; }
+.wk-col { position: relative; border-left: 1px solid var(--line); background-image: repeating-linear-gradient(to bottom, var(--line) 0, var(--line) 1px, transparent 1px, transparent var(--hour)); }
+.wk-col.is-today { background-color: rgba(255, 255, 255, .07); }
+.ev { position: absolute; border-radius: 5px; border-left: 3px solid var(--c); background: var(--cbg); padding: 4px 6px; overflow: hidden; display: flex; flex-direction: column; gap: 1px; }
+.ev.star { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .8); }
+.ev.done { opacity: .5; }
+.ev.done .t { text-decoration: line-through; }
+.ev .t { font-size: 12.5px; font-weight: 600; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ev .m { font-size: 11px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ev.short { flex-direction: row; align-items: center; gap: 4px; padding-top: 1px; padding-bottom: 1px; }
+.dl { position: absolute; left: 3px; right: 3px; height: 22px; display: flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 5px; font-size: 11.5px; font-weight: 600; background: rgba(18, 28, 46, .6); box-shadow: inset 0 0 0 1.5px var(--c); z-index: 3; white-space: nowrap; overflow: hidden; }
+.dl.done { opacity: .5; text-decoration: line-through; }
+.dl svg { flex: none; color: var(--c); }
+.now { position: absolute; left: 0; right: 0; height: 2px; background: var(--now); z-index: 4; }
+.now::before { content: ''; position: absolute; left: -4px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--now); }
+
+/* 월간 */
+.mo-head, .mo-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.mo-head { border-bottom: 1px solid var(--line-strong); flex: none; }
+.mo-head div { padding: 9px 10px; font-size: 13px; font-weight: 700; }
+.mo-grid { flex: 1; min-height: 0; grid-auto-rows: minmax(0, 1fr); }
+.mo-day { min-width: 0; min-height: 0; padding: 6px 7px; display: flex; flex-direction: column; gap: 3px; overflow: hidden; border-left: 1px solid var(--line); border-top: 1px solid var(--line); }
+.mo-day:nth-child(7n+1) { border-left: 0; }
+.mo-day.other { opacity: .45; }
+.mo-day.is-today { background: rgba(255, 255, 255, .16); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .85); }
+.mo-top { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.mo-num { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mi { font-size: 12px; font-weight: 600; line-height: 1.35; padding: 2px 6px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--cbg2); flex: none; }
+.mi.dlm { background: rgba(18, 28, 46, .35); box-shadow: inset 0 0 0 1.5px var(--c); }
+.mi.plain { font-weight: 400; background: rgba(255, 255, 255, .1); border-left: 3px solid var(--c); }
+.mi.done { opacity: .55; text-decoration: line-through; }
+.more { font-size: 10.5px; color: var(--faint); margin-top: auto; }
+
+/* 사이드 */
+.hb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.hb { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, .1); min-width: 0; }
+.hb.done { background: var(--hsoft); }
+.hb .box { flex: none; width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid var(--h); display: flex; align-items: center; justify-content: center; }
+.hb.done .box { background: var(--h); border-color: var(--h); }
+.hb .txt { display: flex; flex-direction: column; min-width: 0; }
+.hb .nm { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hb.done .nm { opacity: .8; }
+.hb .st { font-size: 10.5px; color: var(--faint); }
+.hb .st.fire { color: #ffd0b0; font-weight: 600; }
+.dl-row { display: flex; align-items: center; gap: 10px; }
+.dl-row .dd { min-width: 46px; font-size: 13px; font-weight: 700; color: var(--sat); font-variant-numeric: tabular-nums; }
+.dl-row .dd.soon { color: var(--sun); }
+.dl-row .tx { display: flex; flex-direction: column; min-width: 0; }
+.dl-row .tx b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl-row .tx span { font-size: 11.5px; color: var(--faint); }
+.empty { font-size: 12.5px; color: var(--faint); margin: 0; }
+.stamp { margin-top: auto; font-size: 11px; color: rgba(255, 255, 255, .8); text-shadow: 0 1px 2px rgba(0, 0, 0, .4); text-align: right; }
+
+/* 설정 */
+.panel { position: absolute; top: 86px; right: 24px; width: 300px; z-index: 20; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; background: rgba(18, 28, 46, .86); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); border: 1px solid rgba(255, 255, 255, .3); border-radius: 14px; }
+.panel h2 { margin: 0; font-size: 15px; }
+.panel .x { width: 30px; height: 30px; border: 0; background: transparent; font-size: 15px; }
+.panel label { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+.panel label span { display: flex; justify-content: space-between; }
+.panel input[type=range] { width: 100%; accent-color: #ffffff; }
+.panel .row { display: flex; gap: 6px; }
+.panel .btn { flex: 1; height: 34px; border: 0; border-radius: 8px; background: rgba(255, 255, 255, .18); font-size: 12.5px; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.panel .btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.panel .hint { font-size: 11.5px; color: var(--faint); margin: 0; line-height: 1.5; }
+
+.msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.msg div { max-width: 480px; padding: 24px 28px; line-height: 1.6; }
+.msg h1 { margin: 0 0 8px; font-size: 20px; }
+.msg p { margin: 0; color: var(--ink-2); }
+:focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap" hidden>
+  <header class="bar glass">
+    <div class="bar-title"><b id="title"></b><span id="range"></span></div>
+    <div class="bar-right">
+      <div class="pills" role="radiogroup" aria-label="한 달 보기에 보여줄 일정" id="moFilter" hidden>
+        <button type="button" role="radio" data-mf="imp">★ 중요만</button>
+        <button type="button" role="radio" data-mf="all">전체</button>
+      </div>
+      <div class="pills" role="radiogroup" aria-label="보기">
+        <button type="button" role="radio" id="vWeek">주</button>
+        <button type="button" role="radio" id="vMonth">월</button>
+      </div>
+      <div class="nav">
+        <button type="button" id="prev" aria-label="이전"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg></button>
+        <button type="button" id="today"></button>
+        <button type="button" id="next" aria-label="다음"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button>
+      </div>
+      <a class="round" href="./" target="_blank" rel="noopener" aria-label="사이트에서 고치기" title="사이트에서 고치기"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 2h5v5M14 2 7.5 8.5M12 9.5V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3.5"/></svg></a>
+      <button type="button" class="round" id="gear" aria-label="바탕화면 설정"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+    </div>
+  </header>
+  <div class="main">
+    <section class="board glass" id="board" aria-label="시간표"></section>
+    <aside class="side">
+      <section class="card glass" aria-labelledby="hbH"><h2 id="hbH">오늘 매일 체크<span class="sub" id="hbDate"></span></h2><div id="habits"></div></section>
+      <section class="card glass" aria-labelledby="dlH"><h2 id="dlH">다가오는 마감</h2><div id="dls" style="display:flex;flex-direction:column;gap:10px"></div></section>
+      <p class="stamp" id="stamp"></p>
+    </aside>
+  </div>
+</div>
+
+<section class="panel" id="panel" hidden aria-label="바탕화면 설정">
+  <div style="display:flex;justify-content:space-between;align-items:center"><h2>바탕화면 설정</h2><button type="button" class="x" id="panelClose" aria-label="닫기">✕</button></div>
+  <label for="sAlpha"><span><span>칸 진하기</span><b id="sAlphaV"></b></span><input id="sAlpha" type="range" min="0" max="90" step="1"></label>
+  <label for="sBlur"><span><span>뒤 배경 흐림</span><b id="sBlurV"></b></span><input id="sBlur" type="range" min="0" max="30" step="1"></label>
+  <label for="sScale"><span><span>전체 크기</span><b id="sScaleV"></b></span><input id="sScale" type="range" min="70" max="160" step="5"></label>
+  <div class="row">
+    <span class="btn">배경 사진 고르기<input type="file" id="sPhoto" accept="image/*" aria-label="배경 사진 고르기"></span>
+    <button type="button" class="btn" id="sPhotoReset">기본 배경</button>
+  </div>
+  <div class="row">
+    <button type="button" class="btn" id="sStart"></button>
+  </div>
+  <p class="hint">설정은 이 바탕화면에만 저장돼요. 일정은 사이트에서 고치면 몇 초 안에 여기에도 반영돼요.</p>
+</section>
+
+<div class="msg" id="msg" hidden><div class="glass"><h1 id="msgH"></h1><p id="msgP"></p></div></div>
+
+<script src="firebase-config.js"></script>
+<script src="holidays.js"></script>
+<script src="widget.js" defer></script>
+</body>
+</html>

@@ -18,6 +18,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 <script src="firebase-config.js"></script>
+<script src="holidays.js"></script>
 <script src="app.js" defer></script>
 </head>
 <body>
@@ -147,7 +148,7 @@
       </div>
 
       <div class="field">
-        <label for="fTitle" id="fTitleLabel">일정</label>
+        <div class="field-row"><label for="fTitle" id="fTitleLabel">일정</label><button type="button" id="fStar" class="star-btn" aria-pressed="false">☆ 중요</button></div>
         <input id="fTitle" type="text" maxlength="100" placeholder="예: 동아리 모임">
       </div>
 
@@ -171,10 +172,6 @@
         <div id="rangeBox" class="two" hidden>
           <label class="sub-field">반복 시작일<input id="fFrom" type="date"></label>
           <label class="sub-field">반복 종료일 (선택)<input id="fUntil" type="date"></label>
-        </div>
-        <div class="checks" id="checksRow">
-          <label><input id="fUntimed" type="checkbox">시간 미정</label>
-          <label><input id="fOpenEnd" type="checkbox">끝나는 시간 미정</label>
         </div>
         <p id="evSummary" class="summary"></p>
       </div>
@@ -308,6 +305,20 @@
       <h3>카테고리 · 색</h3>
       <div id="catRows" class="cat-rows"></div>
       <button type="button" id="addCat" class="btn btn-soft btn-sm">+ 카테고리 추가</button>
+    </section>
+    <section class="set-sec" id="widgetSec">
+      <h3>바탕화면 달력</h3>
+      <p id="widgetText" class="muted small"></p>
+      <div id="widgetUrlRow" class="copy-row" hidden>
+        <label for="widgetUrl" class="sr-only">바탕화면 주소</label>
+        <input id="widgetUrl" type="text" readonly>
+        <button type="button" id="widgetCopy" class="btn btn-soft btn-sm">복사</button>
+      </div>
+      <div class="row-gap">
+        <button type="button" id="widgetOn" class="btn btn-soft btn-sm">바탕화면 주소 만들기</button>
+        <button type="button" id="widgetNew" class="btn btn-ghost btn-sm" hidden>새 주소로 바꾸기</button>
+        <button type="button" id="widgetOff" class="btn btn-ghost btn-sm" hidden>끄기</button>
+      </div>
     </section>
     <section class="set-sec" id="archivedSec" hidden>
       <h3>보관한 습관</h3>
